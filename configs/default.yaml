@@ -1,0 +1,11 @@
+ollama:
+  url: http://localhost:11434
+  model: qwen3.5:latest
+  timeout: 120  # seconds
+
+pipeline:
+  max_iterations: 5
+
+executor:
+  keep_test: false
+  jacoco_enabled: true

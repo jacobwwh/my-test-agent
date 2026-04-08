@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "testagent"
+version = "0.1.0"
+description = "Automated unit test generation for Java methods using locally deployed LLMs"
+requires-python = ">=3.10"
+dependencies = [
+    "tree-sitter>=0.20",
+    "tree-sitter-java",
+    "requests",
+    "click",
+    "pyyaml",
+    "jinja2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+]
+
+[project.scripts]
+testagent = "testagent.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

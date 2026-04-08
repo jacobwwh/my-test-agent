@@ -1,0 +1,2 @@
+[console_scripts]
+testagent = testagent.cli:main
