@@ -261,33 +261,85 @@ GeneratedTest(test_code, iteration=N+1)
 
 ## 配置
 
+### 配置字段
+
 生成模块的参数通过 `Config` 数据类传入，默认值：
 
 | 字段 | 默认值 | 说明 |
 |------|--------|------|
-| `api_base_url` | `"https://yunwu.ai/v1"` | 调试阶段使用 yunwu API |
-| `api_key` | `""` | 由 `YUNWU_API_KEY` 环境变量填充 |
-| `model` | `"qwen3.5-397b-a17b"` | 默认模型 |
+| `api_base_url` | `"https://yunwu.ai/v1"` | OpenAI 兼容 API 的 base URL |
+| `api_key` | `""` | API 鉴权密钥，可通过 `YUNWU_API_KEY` 环境变量设置 |
+| `model` | `"qwen3.5-397b-a17b"` | 模型名称 |
 | `timeout` | `120` | 单次请求超时（秒） |
 
-通过 `load_config()` 加载，优先级从低到高：
+### 配置优先级
+
+配置值按以下优先级从低到高覆盖：
 
 ```
 configs/default.yaml  <  YUNWU_API_KEY 环境变量  <  CLI 参数
 ```
 
-**快速配置**：
+### 方式一：修改 `configs/default.yaml`
+
+适合长期固定使用某个 API 端点的场景：
+
+```yaml
+llm:
+  api_base_url: "https://yunwu.ai/v1"   # 替换为你的 API endpoint
+  api_key: "your-api-key-here"           # 直接写入（注意不要提交到 git）
+  model: "qwen3.5-397b-a17b"
+  timeout: 120
+
+pipeline:
+  max_iterations: 5
+
+executor:
+  keep_test: false
+  jacoco_enabled: true
+```
+
+> **注意**：`api_key` 写入配置文件存在泄露风险，建议使用环境变量代替。
+
+### 方式二：环境变量（推荐）
+
+`api_key` 可通过 `YUNWU_API_KEY` 环境变量注入，无需修改任何文件：
 
 ```bash
 export YUNWU_API_KEY=your-key-here
 python test_generator.py
 ```
 
-生产环境切换只需修改 `api_base_url`：
+`api_base_url` 目前不支持环境变量，需在 `default.yaml` 或通过 CLI 指定。
+
+### 方式三：CLI 参数
+
+CLI 参数优先级最高，会覆盖配置文件和环境变量：
+
+```bash
+testagent generate \
+  --project /path/to/project \
+  --class com.example.Calculator \
+  --method add \
+  --ollama-url https://your-api/v1 \
+  --model qwen3.5-397b-a17b
+```
+
+### 方式四：Python API
+
+在代码中调用 `load_config()` 时通过关键字参数覆盖：
 
 ```python
-config = load_config(api_base_url="https://your-prod-api/v1", api_key="prod-key")
+from testagent.config import load_config
+
+config = load_config(
+    api_base_url="https://your-api/v1",
+    api_key="your-key",
+    model="qwen3.5-397b-a17b",
+)
 ```
+
+传入 `None` 的参数不会覆盖配置文件中的值，可安全地将 Click 的 `None` 默认值直接透传。
 
 ---
 

@@ -58,7 +58,7 @@ def load_config(
 
     # Environment variable for API key takes precedence over config file.
     env_key = os.environ.get("YUNWU_API_KEY")
-    if env_key and "api_key" not in flat:
+    if env_key and not flat.get("api_key"):
         flat["api_key"] = env_key
 
     # CLI overrides take precedence (skip None values).

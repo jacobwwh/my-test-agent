@@ -9,7 +9,47 @@ from testagent.generator.llm_client import LLMClient
 from testagent.generator.prompt import build_generate_prompt, build_refine_prompt
 from testagent.models import AnalysisContext, GeneratedTest, TestResult
 
+__all__ = [
+    "TestGenerator",
+    "extract_java_code",
+    "normalize_test_class_name",
+    "canonical_test_class_name",
+]
+
 logger = logging.getLogger(__name__)
+
+
+def canonical_test_class_name(class_name: str) -> str:
+    """Return the canonical test class name for a given fully-qualified class name.
+
+    Convention: ``<SimpleClassName>Test``, e.g.
+    ``"com.example.Calculator"`` → ``"CalculatorTest"``.
+    """
+    simple = class_name.rsplit(".", 1)[-1]
+    return f"{simple}Test"
+
+
+def normalize_test_class_name(test_code: str, class_name: str) -> str:
+    """Rename the public class in *test_code* to match the canonical name.
+
+    The LLM may produce any class name.  This function replaces the first
+    ``public class <Anything>`` declaration with the canonical name so that
+    the executor can always predict the file name and the ``-Dtest=`` argument.
+    """
+    canonical = canonical_test_class_name(class_name)
+    # Match the first public class declaration (not abstract/interface).
+    new_code, count = re.subn(
+        r'(?m)^(public\s+class\s+)(\w+)',
+        lambda m: m.group(1) + canonical,
+        test_code,
+        count=1,
+    )
+    if count == 0:
+        logger.warning(
+            "Could not find 'public class' declaration to normalize; "
+            "leaving test code unchanged."
+        )
+    return new_code
 
 
 def extract_java_code(text: str) -> str:
@@ -81,6 +121,7 @@ class TestGenerator:
                      context.target.class_name, context.target.method_name)
         raw_response = self._client.chat(messages)
         test_code = extract_java_code(raw_response)
+        test_code = normalize_test_class_name(test_code, context.target.class_name)
         return GeneratedTest(test_code=test_code, iteration=1)
 
     def refine(
@@ -111,6 +152,7 @@ class TestGenerator:
                      previous_test.iteration, previous_test.iteration + 1)
         raw_response = self._client.chat(messages)
         test_code = extract_java_code(raw_response)
+        test_code = normalize_test_class_name(test_code, context.target.class_name)
         return GeneratedTest(
             test_code=test_code,
             iteration=previous_test.iteration + 1,
