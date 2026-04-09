@@ -13,3 +13,6 @@ src/testagent/analyzer/dependency.py
 src/testagent/analyzer/java_parser.py
 src/testagent/executor/__init__.py
 src/testagent/generator/__init__.py
+src/testagent/generator/llm_client.py
+src/testagent/generator/prompt.py
+src/testagent/generator/test_generator.py

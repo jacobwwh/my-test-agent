@@ -5,10 +5,11 @@ Summary: Automated unit test generation for Java methods using locally deployed 
 Requires-Python: >=3.10
 Requires-Dist: tree-sitter>=0.20
 Requires-Dist: tree-sitter-java
-Requires-Dist: requests
-Requires-Dist: click
-Requires-Dist: pyyaml
-Requires-Dist: jinja2
+Requires-Dist: openai>=1.0
+Requires-Dist: click>=8.0
+Requires-Dist: pyyaml>=6.0
+Requires-Dist: jinja2>=3.0
 Provides-Extra: dev
-Requires-Dist: pytest; extra == "dev"
+Requires-Dist: pytest>=7.0; extra == "dev"
 Requires-Dist: pytest-cov; extra == "dev"
+Requires-Dist: pytest-mock; extra == "dev"

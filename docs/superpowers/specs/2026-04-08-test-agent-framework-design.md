@@ -2,7 +2,9 @@
 
 ## Context
 
-We are building a framework that automatically generates unit tests for Java methods using locally deployed LLMs. The framework accepts a Java method as input, analyzes its dependencies via program analysis, generates test cases via LLM (Ollama), executes them, and iteratively refines based on feedback (compilation errors, test failures, coverage gaps).
+We are building a framework that automatically generates unit tests for Java methods using LLMs. The framework accepts a Java method as input, analyzes its dependencies via program analysis, generates test cases via LLM (OpenAI API compatible), executes them, and iteratively refines based on feedback (compilation errors, test failures, coverage gaps).
+
+The LLM is accessed via OpenAI API compatible interface. In production, the model is deployed on a remote server we don't have direct access to — we interact with it purely through the API. During the current debugging phase, we use the yunwu API's OpenAI-compatible endpoint. Default model: `qwen3.5-397b-a17b`.
 
 This addresses the challenge of manual test writing being time-consuming and LLMs lacking sufficient context about project dependencies when generating tests.
 
@@ -16,7 +18,7 @@ User Input (project path, class, method)
   [Analyzer] --> AnalysisContext
        |
   [Generator] <-- AnalysisContext + previous TestResult (if iterating)
-  [Ollama]    --> GeneratedTest
+  [OpenAI API] --> GeneratedTest
        |
   [Executor]  --> TestResult (compile/run/coverage)
        |
@@ -35,7 +37,7 @@ Modules communicate via well-defined dataclasses. Each module is an independent 
 |-----------|-----------|-----------|
 | Framework language | Python | Rich ecosystem for AST parsing, LLM clients, rapid prototyping |
 | Java parsing | tree-sitter (tree-sitter-java) | Lightweight, no JDK dependency, good enough for dependency extraction |
-| LLM backend | Ollama REST API | Simple, local deployment, supports qwen3.5-9b and others |
+| LLM backend | OpenAI API (yunwu API for debug) | Standard OpenAI-compatible interface, default model qwen3.5-397b-a17b |
 | Test execution | Maven/Gradle + JaCoCo | Standard Java build tools, JaCoCo for coverage |
 | CLI | click | Declarative CLI with auto-generated help |
 | Config | YAML | Human-readable configuration |
@@ -58,7 +60,7 @@ my-test-agent/
 │       │   └── dependency.py   # Dependency extraction logic
 │       ├── generator/
 │       │   ├── __init__.py
-│       │   ├── ollama_client.py # Ollama REST API client
+│       │   ├── llm_client.py    # OpenAI API compatible client
 │       │   ├── prompt.py       # Prompt template management
 │       │   └── test_generator.py # Test generation orchestration
 │       └── executor/
@@ -170,8 +172,9 @@ Framework configuration.
 ```python
 @dataclass
 class Config:
-    ollama_url: str = "http://localhost:11434"
-    model: str = "qwen3.5:latest"
+    api_base_url: str = ""      # OpenAI API compatible base URL (yunwu API for debug)
+    api_key: str = ""           # API key (loaded from env var or config)
+    model: str = "qwen3.5-397b-a17b"
     max_iterations: int = 5
     timeout: int = 120
     keep_test: bool = False
@@ -208,11 +211,11 @@ class JavaAnalyzer:
 
 ### 2. Generator (`testagent/generator/`)
 
-**Responsibility**: Call Ollama to generate or refine JUnit test code.
+**Responsibility**: Call LLM via OpenAI API compatible interface to generate or refine JUnit test code.
 
 **Key behaviors**:
 - Build a prompt containing: target method source, class context, dependency sources, and (if iterating) previous test result feedback
-- Call Ollama `/api/chat` endpoint with the constructed prompt
+- Call LLM via OpenAI `chat.completions.create` (using `openai` Python SDK with custom `base_url`)
 - Extract the Java code block from the LLM response
 - Return structured GeneratedTest
 
@@ -224,7 +227,7 @@ class JavaAnalyzer:
 **Interface**:
 ```python
 class TestGenerator:
-    def __init__(self, ollama_url: str, model: str): ...
+    def __init__(self, api_base_url: str, api_key: str, model: str): ...
     def generate(self, context: AnalysisContext) -> GeneratedTest: ...
     def refine(self, context: AnalysisContext, previous_test: GeneratedTest,
                test_result: TestResult) -> GeneratedTest: ...
@@ -283,12 +286,13 @@ testagent generate \
   --method processOrder
 
 # Options
-  --model qwen3.5:latest          # Ollama model name (default: qwen2.5-coder:7b)
-  --ollama-url http://localhost:11434  # Ollama server URL
-  --max-iterations 5              # Max refinement iterations (default: 5)
-  --output ./generated_tests      # Copy final test to this directory
-  --keep-test                     # Don't delete test from project after execution
-  --verbose                       # Show detailed output
+  --model qwen3.5-397b-a17b        # Model name (default: qwen3.5-397b-a17b)
+  --api-base-url <url>             # OpenAI API compatible base URL
+  --api-key <key>                  # API key (or set TESTAGENT_API_KEY env var)
+  --max-iterations 5               # Max refinement iterations (default: 5)
+  --output ./generated_tests       # Copy final test to this directory
+  --keep-test                      # Don't delete test from project after execution
+  --verbose                        # Show detailed output
 ```
 
 ### 6. Python API
@@ -297,8 +301,9 @@ testagent generate \
 from testagent import Pipeline, Config
 
 config = Config(
-    ollama_url="http://localhost:11434",
-    model="qwen3.5:latest",
+    api_base_url="https://yunwu.ai/v1",  # yunwu API for debugging
+    api_key="your-api-key",
+    model="qwen3.5-397b-a17b",
     max_iterations=5,
 )
 pipeline = Pipeline(config)
@@ -314,9 +319,10 @@ print(result.final_result.coverage)
 ## Configuration (`configs/default.yaml`)
 
 ```yaml
-ollama:
-  url: http://localhost:11434
-  model: qwen3.5:latest
+llm:
+  api_base_url: "https://yunwu.ai/v1"   # OpenAI API compatible endpoint (yunwu for debug)
+  api_key: ""                            # Or set TESTAGENT_API_KEY env var
+  model: "qwen3.5-397b-a17b"
   timeout: 120  # seconds
 
 pipeline:
@@ -331,7 +337,7 @@ executor:
 
 | Scenario | Behavior |
 |----------|----------|
-| Ollama unreachable | Raise clear error: "Cannot connect to Ollama at {url}. Is it running?" |
+| LLM API unreachable | Raise clear error: "Cannot connect to LLM API at {base_url}. Check URL and API key." |
 | Target method not found | Raise error with list of methods found in the class |
 | tree-sitter parse failure | Log warning, fall back to regex-based extraction |
 | Build tool not found | Raise error: "Neither pom.xml nor build.gradle found in {path}" |
@@ -343,7 +349,7 @@ executor:
 ```
 tree-sitter >= 0.20
 tree-sitter-java
-requests           # For Ollama REST API
+openai             # OpenAI API compatible SDK
 click              # CLI framework
 pyyaml             # Configuration
 jinja2             # Prompt templates
@@ -352,7 +358,7 @@ jinja2             # Prompt templates
 ## Verification Plan
 
 1. **Unit tests**: Test each module in isolation with fixtures (sample Java projects)
-2. **Integration test**: End-to-end test with a simple Java project + Ollama running locally
+2. **Integration test**: End-to-end test with a simple Java project + LLM API available
 3. **Manual verification**:
    - Run against a real Java project with known methods
    - Verify generated tests compile and run
@@ -363,7 +369,6 @@ jinja2             # Prompt templates
 
 - Support for C++ and Python as target languages
 - Transitive dependency resolution (depth > 1)
-- Multiple LLM backend support (vLLM, OpenAI API)
 - Parallel test generation for multiple methods
 - Web UI
 - Agent/Tool architecture where LLM can request additional analysis during generation

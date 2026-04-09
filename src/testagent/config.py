@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import yaml
@@ -35,13 +36,15 @@ def load_config(
 
     # Flatten the nested YAML structure into Config field names.
     flat: dict[str, object] = {}
-    ollama = raw.get("ollama", {})
-    if "url" in ollama:
-        flat["ollama_url"] = ollama["url"]
-    if "model" in ollama:
-        flat["model"] = ollama["model"]
-    if "timeout" in ollama:
-        flat["timeout"] = ollama["timeout"]
+    llm = raw.get("llm", {})
+    if "api_base_url" in llm:
+        flat["api_base_url"] = llm["api_base_url"]
+    if "api_key" in llm:
+        flat["api_key"] = llm["api_key"]
+    if "model" in llm:
+        flat["model"] = llm["model"]
+    if "timeout" in llm:
+        flat["timeout"] = llm["timeout"]
 
     pipeline = raw.get("pipeline", {})
     if "max_iterations" in pipeline:
@@ -52,6 +55,11 @@ def load_config(
         flat["keep_test"] = executor["keep_test"]
     if "jacoco_enabled" in executor:
         flat["jacoco_enabled"] = executor["jacoco_enabled"]
+
+    # Environment variable for API key takes precedence over config file.
+    env_key = os.environ.get("YUNWU_API_KEY")
+    if env_key and "api_key" not in flat:
+        flat["api_key"] = env_key
 
     # CLI overrides take precedence (skip None values).
     for key, value in overrides.items():

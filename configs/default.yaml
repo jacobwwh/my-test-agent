@@ -1,6 +1,7 @@
-ollama:
-  url: http://localhost:11434
-  model: qwen3.5:latest
+llm:
+  api_base_url: "https://yunwu.ai/v1"   # OpenAI API compatible endpoint
+  api_key: ""                            # Defaults to YUNWU_API_KEY env var
+  model: "qwen3.5-397b-a17b"
   timeout: 120  # seconds
 
 pipeline:

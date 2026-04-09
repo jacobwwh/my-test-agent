@@ -2,7 +2,9 @@
 
 ## 背景
 
-构建一个 Python 框架，利用本地部署的大语言模型（LLM）自动为 Java 方法生成单元测试。框架包含 3 个模块：程序分析（tree-sitter）、测试生成（Ollama）、测试执行（Maven/Gradle + JaCoCo），通过管道式架构串联，并支持基于反馈的迭代修复。
+构建一个 Python 框架，利用大语言模型（LLM）自动为 Java 方法生成单元测试。框架包含 3 个模块：程序分析（tree-sitter）、测试生成（OpenAI API 兼容接口）、测试执行（Maven/Gradle + JaCoCo），通过管道式架构串联，并支持基于反馈的迭代修复。
+
+LLM 调用方式：通过 OpenAI API 兼容接口调用大模型。在真实应用中，大模型部署在远程服务器上，通过 OpenAI API 交互；当前调试阶段使用 yunwu API 的 OpenAI 接口，默认模型为 `qwen3.5-397b-a17b`。
 
 完整设计文档：`docs/superpowers/specs/2026-04-08-test-agent-framework-design.md`
 
@@ -10,7 +12,7 @@
 
 ### 第 1 步：项目脚手架搭建
 
-- 创建 `pyproject.toml`，声明依赖项（tree-sitter、tree-sitter-java、requests、click、pyyaml、jinja2）
+- 创建 `pyproject.toml`，声明依赖项（tree-sitter、tree-sitter-java、openai、click、pyyaml、jinja2）
 - 创建包结构：`src/testagent/` 及所有子包（analyzer/、generator/、executor/）
 - 创建 `configs/default.yaml` 默认配置文件
 - 创建 `src/testagent/models.py`，定义所有数据类（TargetMethod、Dependency、AnalysisContext、GeneratedTest、TestResult、CoverageReport、PipelineResult、Config）
@@ -39,14 +41,15 @@
 
 ---
 
-### 第 3 步：测试生成模块 - Ollama + Prompt 模板
+### 第 3 步：测试生成模块 - OpenAI API + Prompt 模板
 
 - 在 `prompts/` 目录下创建 Prompt 模板：
   - `generate_test.txt`：首次生成测试用例的 Prompt（Jinja2 模板）
   - `fix_test.txt`：基于错误/覆盖度反馈的修复 Prompt
-- 实现 `src/testagent/generator/ollama_client.py`：
-  - 封装 Ollama `/api/chat` REST 接口
-  - 处理连接错误和超时
+- 实现 `src/testagent/generator/llm_client.py`：
+  - 使用 `openai` Python SDK，通过 OpenAI API 兼容接口调用大模型
+  - 支持自定义 `base_url` 和 `api_key`（调试阶段使用 yunwu API，生产阶段切换为实际部署地址）
+  - 处理连接错误、超时、API 错误
   - 提取文本响应
 - 实现 `src/testagent/generator/prompt.py`：
   - 加载并渲染 Jinja2 Prompt 模板
@@ -56,7 +59,7 @@
   - `TestGenerator.refine(context, previous_test, test_result)`：迭代修复
   - 从 LLM 响应中提取 Java 代码块（解析 Markdown 代码围栏）
 
-**涉及文件**：`prompts/generate_test.txt`、`prompts/fix_test.txt`、`src/testagent/generator/ollama_client.py`、`src/testagent/generator/prompt.py`、`src/testagent/generator/test_generator.py`、`src/testagent/generator/__init__.py`
+**涉及文件**：`prompts/generate_test.txt`、`prompts/fix_test.txt`、`src/testagent/generator/llm_client.py`、`src/testagent/generator/prompt.py`、`src/testagent/generator/test_generator.py`、`src/testagent/generator/__init__.py`
 
 ---
 
@@ -105,9 +108,9 @@
   - 包含配置了 JaCoCo 插件的 pom.xml
 - 编写单元测试：
   - `tests/test_analyzer/`：测试 Java 解析和依赖提取（使用测试夹具）
-  - `tests/test_generator/`：测试 Prompt 构建和代码提取（Mock Ollama）
+  - `tests/test_generator/`：测试 Prompt 构建和代码提取（Mock OpenAI API）
   - `tests/test_executor/`：测试构建输出解析和 JaCoCo XML 解析
-- 编写集成测试（需要 Ollama 运行）：
+- 编写集成测试（需要 LLM API 可用）：
   - `tests/test_integration.py`：使用示例项目的端到端管道测试
 
 **涉及文件**：`tests/fixtures/`、`tests/test_analyzer/`、`tests/test_generator/`、`tests/test_executor/`、`tests/test_integration.py`
@@ -117,7 +120,7 @@
 ## 验证方式
 
 1. `pip install -e .` - 验证包可以正常安装
-2. `pytest tests/ -k "not integration"` - 运行单元测试，无需 Ollama 即可全部通过
+2. `pytest tests/ -k "not integration"` - 运行单元测试，无需 LLM API 即可全部通过
 3. `testagent generate --help` - 验证 CLI 命令正常工作
-4. 启动 Ollama 后运行：`testagent generate --project tests/fixtures/sample-java-project --class com.example.Calculator --method add` - 验证端到端流程
+4. 配置 yunwu API 后运行：`testagent generate --project tests/fixtures/sample-java-project --class com.example.Calculator --method add` - 验证端到端流程
 5. 检查生成的测试能够在示例项目中成功编译和运行
