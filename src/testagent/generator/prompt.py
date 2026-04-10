@@ -12,7 +12,24 @@ _PROMPTS_DIR = Path(__file__).resolve().parent.parent.parent.parent / "prompts"
 
 
 def _get_env(prompts_dir: Path | None = None) -> Environment:
-    """Create a Jinja2 environment for the prompts directory."""
+    """创建 Prompt 模板渲染环境。
+
+    功能简介：
+        基于指定的 prompts 目录创建一个 Jinja2 `Environment`，
+        用于加载和渲染测试生成与修复模板。
+
+    输入参数：
+        prompts_dir:
+            Prompt 模板目录；为 `None` 时使用模块内置默认目录。
+
+    返回值：
+        Environment:
+            已配置 `FileSystemLoader` 的 Jinja2 渲染环境。
+
+    使用示例：
+        >>> env = _get_env()
+        >>> env.get_template("generate_test.txt")
+    """
     return Environment(
         loader=FileSystemLoader(str(prompts_dir or _PROMPTS_DIR)),
         keep_trailing_newline=True,
@@ -23,9 +40,26 @@ def build_generate_prompt(
     context: AnalysisContext,
     prompts_dir: Path | None = None,
 ) -> list[dict[str, str]]:
-    """Build the chat messages for initial test generation.
+    """构造首次生成测试用例的聊天消息。
 
-    Returns a list of message dicts suitable for the OpenAI chat API.
+    功能简介：
+        将分析阶段得到的目标方法、依赖源码和 import 信息渲染进
+        `generate_test.txt` 模板，生成可直接发送给 LLM 的消息列表。
+
+    输入参数：
+        context:
+            分析上下文，包含目标方法、依赖源码、imports 和 package 信息。
+        prompts_dir:
+            自定义 Prompt 模板目录；为 `None` 时使用默认模板目录。
+
+    返回值：
+        list[dict[str, str]]:
+            符合 OpenAI Chat API 结构的消息列表，通常为单条 `user` 消息。
+
+    使用示例：
+        >>> messages = build_generate_prompt(context)
+        >>> messages[0]["role"]
+        'user'
     """
     env = _get_env(prompts_dir)
     template = env.get_template("generate_test.txt")
@@ -43,9 +77,30 @@ def build_refine_prompt(
     test_result: TestResult,
     prompts_dir: Path | None = None,
 ) -> list[dict[str, str]]:
-    """Build the chat messages for iterative test refinement.
+    """构造测试修复/迭代优化的聊天消息。
 
-    Returns a list of message dicts suitable for the OpenAI chat API.
+    功能简介：
+        将目标方法上下文、上一轮测试代码以及编译/执行/覆盖率反馈渲染进
+        `fix_test.txt` 模板，生成下一轮优化测试用例所需的输入消息。
+
+    输入参数：
+        context:
+            分析上下文，包含目标方法及依赖信息。
+        previous_test:
+            上一轮生成的测试代码。
+        test_result:
+            上一轮执行结果，包含编译错误、失败测试和覆盖率信息。
+        prompts_dir:
+            自定义 Prompt 模板目录；为 `None` 时使用默认模板目录。
+
+    返回值：
+        list[dict[str, str]]:
+            符合 OpenAI Chat API 结构的消息列表。
+
+    使用示例：
+        >>> messages = build_refine_prompt(context, previous_test, test_result)
+        >>> messages[0]["role"]
+        'user'
     """
     env = _get_env(prompts_dir)
     template = env.get_template("fix_test.txt")

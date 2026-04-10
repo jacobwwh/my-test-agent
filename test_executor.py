@@ -52,14 +52,67 @@ PRESET_TARGETS = DEFAULT_TARGETS
 # ---------------------------------------------------------------------------
 
 def _sep(char: str = "=", width: int = 64) -> str:
+    """生成分隔线字符串。
+
+    功能简介：
+        按指定字符和宽度构造一条终端输出分隔线，用于增强 CLI 展示可读性。
+
+    输入参数：
+        char:
+            构成分隔线的字符，默认为 `=`。
+        width:
+            分隔线长度，默认为 `64`。
+
+    返回值：
+        str:
+            生成好的分隔线字符串。
+
+    使用示例：
+        >>> _sep("-", 5)
+        '-----'
+    """
     return char * width
 
 
 def _short(class_name: str) -> str:
+    """提取类的简单名称。
+
+    功能简介：
+        将全限定类名转换为简单类名，便于终端输出和标签展示。
+
+    输入参数：
+        class_name:
+            全限定类名，例如 `com.example.Calculator`。
+
+    返回值：
+        str:
+            简单类名，例如 `Calculator`。
+
+    使用示例：
+        >>> _short("com.example.Calculator")
+        'Calculator'
+    """
     return class_name.rsplit(".", 1)[-1]
 
 
 def _print_context(ctx: AnalysisContext) -> None:
+    """打印分析上下文信息。
+
+    功能简介：
+        将分析器返回的目标类、方法、包名和依赖信息输出到终端，
+        便于用户核对当前执行目标。
+
+    输入参数：
+        ctx:
+            分析上下文对象。
+
+    返回值：
+        None:
+            该函数仅负责终端输出。
+
+    使用示例：
+        >>> _print_context(ctx)
+    """
     t = ctx.target
     print(f"  Class:        {t.class_name}")
     print(f"  Method:       {t.method_name}")
@@ -71,6 +124,24 @@ def _print_context(ctx: AnalysisContext) -> None:
 
 
 def _print_test_result(result: TestResult, iteration: int) -> None:
+    """打印单轮测试执行结果。
+
+    功能简介：
+        将编译状态、失败测试、覆盖率和错误摘要等关键信息格式化输出到终端。
+
+    输入参数：
+        result:
+            当前轮次的测试执行结果。
+        iteration:
+            当前执行轮次编号。
+
+    返回值：
+        None:
+            该函数仅负责终端输出。
+
+    使用示例：
+        >>> _print_test_result(result, 1)
+    """
     status = "PASS" if result.passed else ("COMPILE ERROR" if not result.compiled else "FAIL")
     print(f"\n  Iteration {iteration} result: [{status}]")
 
@@ -110,6 +181,24 @@ def _print_test_result(result: TestResult, iteration: int) -> None:
 
 
 def _print_code_preview(code: str, max_lines: int = 20) -> None:
+    """打印测试代码预览。
+
+    功能简介：
+        将测试代码的前若干行输出到终端，帮助用户快速查看 LLM 当前生成结果。
+
+    输入参数：
+        code:
+            测试代码文本。
+        max_lines:
+            最多展示的行数，默认 `20`。
+
+    返回值：
+        None:
+            该函数仅负责终端输出。
+
+    使用示例：
+        >>> _print_code_preview("line1\\nline2", max_lines=1)
+    """
     lines = code.splitlines()
     shown = lines[:max_lines]
     print(f"\n  --- Generated test ({len(lines)} lines total) ---")
@@ -124,9 +213,25 @@ def _print_code_preview(code: str, max_lines: int = 20) -> None:
 # ---------------------------------------------------------------------------
 
 def _coverage_met(result: TestResult, min_branch_coverage: float) -> bool:
-    """Return True if branch coverage meets or exceeds *min_branch_coverage*.
+    """判断分支覆盖率是否达标。
 
-    When coverage data is unavailable the check is skipped (returns True).
+    功能简介：
+        检查测试结果中的分支覆盖率是否达到目标阈值；
+        若没有覆盖率数据，则默认视为不阻塞后续流程。
+
+    输入参数：
+        result:
+            测试执行结果对象。
+        min_branch_coverage:
+            目标最小分支覆盖率，范围通常在 `0.0` 到 `1.0` 之间。
+
+    返回值：
+        bool:
+            达标时返回 `True`，否则返回 `False`；无覆盖率数据时返回 `True`。
+
+    使用示例：
+        >>> _coverage_met(result, 0.8)
+        True
     """
     if result.coverage is None:
         return True
@@ -146,9 +251,34 @@ def run_one(
     max_iterations: int,
     min_branch_coverage: float,
 ) -> bool:
-    """Run the full generate → execute → refine loop for one target.
+    """对单个目标执行完整流水线。
 
-    Returns True if the final result compiled and all tests passed.
+    功能简介：
+        针对一个类方法依次执行分析、测试生成、测试执行和迭代优化，
+        直到测试通过且覆盖率达标，或达到最大迭代次数。
+
+    输入参数：
+        class_name:
+            被测类的全限定类名。
+        method_name:
+            被测方法名。
+        analyzer:
+            Java 源码分析器。
+        generator:
+            测试生成与修复器。
+        executor:
+            测试执行器。
+        max_iterations:
+            最大迭代次数。
+        min_branch_coverage:
+            最小分支覆盖率阈值。
+
+    返回值：
+        bool:
+            最终测试通过时返回 `True`，否则返回 `False`。
+
+    使用示例：
+        >>> ok = run_one("com.example.Calculator", "add", analyzer, generator, executor, 3, 0.8)
     """
     label = f"{_short(class_name)}.{method_name}"
     print(f"\n{_sep()}")
@@ -220,6 +350,23 @@ def run_one(
 # ---------------------------------------------------------------------------
 
 def parse_args() -> argparse.Namespace:
+    """解析命令行参数。
+
+    功能简介：
+        定义并解析完整流水线脚本支持的 CLI 参数，包括目标方法、项目路径、
+        最大迭代次数和覆盖率阈值等。
+
+    输入参数：
+        无。
+
+    返回值：
+        argparse.Namespace:
+            已解析的参数对象。
+
+    使用示例：
+        >>> args = parse_args()
+        >>> args.max_iterations
+    """
     p = argparse.ArgumentParser(
         description="Full generate → execute → refine pipeline",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -282,6 +429,22 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    """脚本主入口。
+
+    功能简介：
+        负责读取配置、解析目标、初始化分析器/生成器/执行器，
+        并逐个执行 Analyzer -> Generator -> Executor 的完整流程。
+
+    输入参数：
+        无。
+
+    返回值：
+        None:
+            主要通过终端输出反馈执行状态；失败时可能调用 `sys.exit()`。
+
+    使用示例：
+        >>> main()
+    """
     args = parse_args()
 
     # ── List mode ───────────────────────────────────────────────────

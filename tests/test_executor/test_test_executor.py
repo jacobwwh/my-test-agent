@@ -194,6 +194,14 @@ class TestExecuteFailures:
         assert result.compiled is False
         assert "timeout" in result.compile_errors
 
+    @patch("testagent.executor.run_build", side_effect=Exception("timeout"))
+    def test_test_file_removed_when_build_process_exception(self, mock_run, maven_project, tmp_path):
+        executor = TestExecutor(maven_project, reports_dir=tmp_path / "r", keep_test=False)
+        executor.execute(_make_test(), _make_context())
+        test_dir = maven_project / "src" / "test" / "java" / "com" / "example"
+        leftover = list(test_dir.glob("*.java")) if test_dir.exists() else []
+        assert leftover == []
+
     def test_invalid_test_code_returns_error(self, maven_project, tmp_path):
         """Test code without a 'public class' declaration should fail gracefully."""
         bad_test = GeneratedTest(test_code="interface NotAClass {}", iteration=1)

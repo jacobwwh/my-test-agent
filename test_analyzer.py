@@ -14,7 +14,24 @@ TEST_DIR = "tests/test_analyzer/"
 
 
 def _collect_tests() -> list[str]:
-    """Use pytest --collect-only to get all test node IDs."""
+    """收集 analyzer 测试用例列表。
+
+    功能简介：
+        调用 `pytest --collect-only` 枚举 `tests/test_analyzer/` 下的所有测试节点，
+        并提取可用于后续交互式选择的测试 ID 列表。
+
+    输入参数：
+        无。
+
+    返回值：
+        list[str]:
+            收集到的 pytest 测试节点 ID 列表。
+
+    使用示例：
+        >>> tests = _collect_tests()
+        >>> isinstance(tests, list)
+        True
+    """
     result = subprocess.run(
         [sys.executable, "-m", "pytest", TEST_DIR, "--collect-only", "-q"],
         capture_output=True, text=True,
@@ -27,7 +44,23 @@ def _collect_tests() -> list[str]:
 
 
 def _interactive_select(tests: list[str]) -> list[str]:
-    """Print a numbered menu and let the user pick tests to run."""
+    """交互式选择要执行的测试。
+
+    功能简介：
+        在终端中打印编号菜单，允许用户通过序号、区间、`a` 或 `q`
+        选择要运行的 analyzer 测试用例。
+
+    输入参数：
+        tests:
+            可供选择的测试节点 ID 列表。
+
+    返回值：
+        list[str]:
+            用户选择后的测试节点 ID 列表；若用户退出或未选中则可能为空列表。
+
+    使用示例：
+        >>> _interactive_select(["tests/test_analyzer/test_demo.py::test_x"])
+    """
     print(f"\nFound {len(tests)} test(s):\n")
     for i, t in enumerate(tests, 1):
         print(f"  [{i:>2}] {t}")
@@ -59,6 +92,22 @@ def _interactive_select(tests: list[str]) -> list[str]:
 
 
 def main() -> int:
+    """脚本主入口。
+
+    功能简介：
+        负责解析脚本参数，并在“直接转发给 pytest”与“交互式选择测试后执行”
+        两种模式之间切换，最终返回 pytest 的退出码。
+
+    输入参数：
+        无。
+
+    返回值：
+        int:
+            命令退出码；通常与底层 pytest 执行结果一致。
+
+    使用示例：
+        >>> exit_code = main()
+    """
     args = sys.argv[1:]
 
     # If any args given, delegate directly to pytest.

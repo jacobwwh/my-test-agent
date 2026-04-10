@@ -16,17 +16,27 @@ def load_config(
     config_path: Path | None = None,
     **overrides: object,
 ) -> Config:
-    """Load configuration from a YAML file and apply CLI overrides.
+    """加载并合并项目配置。
 
-    Parameters
-    ----------
-    config_path:
-        Path to a YAML config file.  Falls back to ``configs/default.yaml``
-        shipped with the project when *None*.
-    **overrides:
-        Keyword arguments whose names match :class:`Config` fields.  Only
-        non-``None`` values are applied, so callers can forward raw Click
-        parameters without filtering.
+    功能简介：
+        从 YAML 配置文件读取嵌套配置，展开为 `Config` 数据对象需要的字段，
+        再依次应用环境变量和 CLI 覆盖项，返回最终生效的配置。
+
+    输入参数：
+        config_path:
+            配置文件路径；为 `None` 时使用项目默认的 `configs/default.yaml`。
+        **overrides:
+            额外覆盖项，字段名需与 `Config` 数据类字段一致；
+            值为 `None` 的项会被忽略。
+
+    返回值：
+        Config:
+            合并后的最终配置对象。
+
+    使用示例：
+        >>> config = load_config(model="demo-model", max_iterations=3)
+        >>> config.model
+        'demo-model'
     """
     path = config_path or _DEFAULT_CONFIG_PATH
     raw: dict = {}

@@ -26,6 +26,8 @@ When working in this repository, you must prioritize:
 
 ## Core operating rules
 
+为函数编写文档时默认使用中文。
+
 ### Rule 1: Never freely operate on the remote GPU server
 
 Do **not** run arbitrary commands on the remote server.

@@ -51,19 +51,72 @@ PRESET_TARGETS = DEFAULT_TARGETS
 
 
 def _short_name(class_name: str) -> str:
-    """'com.example.service.OrderService' -> 'OrderService'."""
+    """提取类的简单名称。
+
+    功能简介：
+        将全限定类名转换为不带包路径的简单类名，便于展示与拼接文件名。
+
+    输入参数：
+        class_name:
+            全限定类名，例如 `com.example.service.OrderService`。
+
+    返回值：
+        str:
+            简单类名，例如 `OrderService`。
+
+    使用示例：
+        >>> _short_name("com.example.service.OrderService")
+        'OrderService'
+    """
     return class_name.rsplit(".", 1)[-1]
 
 
 def _output_path(project_name: str, class_name: str, method_name: str) -> Path:
-    """Build the output file path for a generated test."""
+    """构造生成测试的输出路径。
+
+    功能简介：
+        根据项目名、被测类名和方法名生成测试代码保存路径，
+        输出位置位于 `generated_tests/<project-name>/` 下。
+
+    输入参数：
+        project_name:
+            被测项目目录名。
+        class_name:
+            被测类的全限定类名。
+        method_name:
+            被测方法名。
+
+    返回值：
+        Path:
+            生成测试文件的目标路径。
+
+    使用示例：
+        >>> _output_path("sample-java-project", "com.example.Calculator", "add")
+        Path('generated_tests/sample-java-project/Calculator_add_Test.java')
+    """
     simple_class = _short_name(class_name)
     filename = f"{simple_class}_{method_name}_Test.java"
     return OUTPUT_ROOT / project_name / filename
 
 
 def _print_context_summary(ctx) -> None:
-    """Print a brief summary of the analysis context."""
+    """打印分析上下文摘要。
+
+    功能简介：
+        将目标类、方法、文件路径、包名和依赖数量等关键信息输出到终端，
+        便于用户快速确认分析结果。
+
+    输入参数：
+        ctx:
+            `AnalysisContext` 分析上下文对象。
+
+    返回值：
+        None:
+            该函数只负责终端输出，不返回数据。
+
+    使用示例：
+        >>> _print_context_summary(ctx)
+    """
     t = ctx.target
     print(f"  Class:        {t.class_name}")
     print(f"  Method:       {t.method_name}")
@@ -76,7 +129,24 @@ def _print_context_summary(ctx) -> None:
 
 
 def _save_test(path: Path, test_code: str) -> None:
-    """Write generated test code to file."""
+    """保存生成的测试代码到文件。
+
+    功能简介：
+        创建输出文件所需的父目录，并将生成的测试代码写入目标路径。
+
+    输入参数：
+        path:
+            输出文件路径。
+        test_code:
+            待写入的测试代码文本。
+
+    返回值：
+        None:
+            该函数执行文件写入和终端提示，不返回业务结果。
+
+    使用示例：
+        >>> _save_test(Path("generated_tests/demo/FooTest.java"), "public class FooTest {}")
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(test_code, encoding="utf-8")
     print(f"  Saved to: {path}")
@@ -94,7 +164,31 @@ def run_one(
     class_name: str,
     method_name: str,
 ) -> bool:
-    """Analyze + generate for a single target.  Returns True on success."""
+    """对单个目标执行分析与测试生成。
+
+    功能简介：
+        先调用分析器解析目标方法，再调用生成器请求 LLM 产出测试代码，
+        最后将结果保存到输出目录并打印预览。
+
+    输入参数：
+        analyzer:
+            Java 源码分析器。
+        generator:
+            测试生成器。
+        project_name:
+            被测项目名称，用于构造输出目录。
+        class_name:
+            被测类的全限定类名。
+        method_name:
+            被测方法名。
+
+    返回值：
+        bool:
+            成功生成并保存测试时返回 `True`，否则返回 `False`。
+
+    使用示例：
+        >>> ok = run_one(analyzer, generator, "sample-java-project", "com.example.Calculator", "add")
+    """
     label = f"{_short_name(class_name)}.{method_name}"
     print(f"\n{'='*60}")
     print(f"Target: {label}")
@@ -139,6 +233,23 @@ def run_one(
 
 
 def parse_args() -> argparse.Namespace:
+    """解析命令行参数。
+
+    功能简介：
+        定义并解析 `test_generator.py` 支持的 CLI 参数，
+        包括目标方法、项目路径和模型覆盖项等。
+
+    输入参数：
+        无。
+
+    返回值：
+        argparse.Namespace:
+            已解析的命令行参数对象。
+
+    使用示例：
+        >>> args = parse_args()
+        >>> args.target
+    """
     p = argparse.ArgumentParser(description="Analyzer + Generator integration test")
     p.add_argument(
         "--target",
@@ -170,6 +281,22 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    """脚本主入口。
+
+    功能简介：
+        负责读取参数和配置、解析待处理目标、初始化分析器与生成器，
+        并按顺序执行整个 Analyzer -> Generator 流程。
+
+    输入参数：
+        无。
+
+    返回值：
+        None:
+            通过终端输出执行过程；失败时可能通过 `sys.exit()` 退出。
+
+    使用示例：
+        >>> main()
+    """
     args = parse_args()
 
     # --- List mode ---

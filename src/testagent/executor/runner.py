@@ -39,14 +39,26 @@ _MAVEN_COMPILE_LINE = re.compile(r"^\[ERROR\]\s+.+\.java:\[\d+", re.MULTILINE)
 
 
 def parse_maven_result(returncode: int, output: str) -> dict:
-    """Parse Maven build output.
+    """解析 Maven 构建输出。
 
-    Returns a dict with keys:
-    - ``compiled`` (bool)
-    - ``compile_errors`` (str)
-    - ``passed`` (bool)
-    - ``test_output`` (str)
-    - ``failed_tests`` (list[str])
+    功能简介：
+        根据 Maven 控制台输出判断测试是否编译成功、是否全部通过，
+        并提取编译错误信息与失败测试名称。
+
+    输入参数：
+        returncode:
+            Maven 进程退出码。
+        output:
+            Maven 标准输出与标准错误合并后的文本。
+
+    返回值：
+        dict:
+            结构化解析结果，包含 `compiled`、`compile_errors`、`passed`、
+            `test_output` 和 `failed_tests` 等字段。
+
+    使用示例：
+        >>> parse_maven_result(0, "[INFO] BUILD SUCCESS")
+        {'compiled': True, 'compile_errors': '', 'passed': True, 'test_output': '[INFO] BUILD SUCCESS', 'failed_tests': []}
     """
     has_compile_error = bool(_MAVEN_COMPILE_ERROR_HEADER.search(output))
     compiled = not has_compile_error
@@ -109,9 +121,25 @@ _GRADLE_FAILED_TEST = re.compile(
 
 
 def parse_gradle_result(returncode: int, output: str) -> dict:
-    """Parse Gradle build output.
+    """解析 Gradle 构建输出。
 
-    Returns the same dict shape as :func:`parse_maven_result`.
+    功能简介：
+        根据 Gradle 控制台输出判断编译状态和测试通过情况，并抽取编译错误、
+        失败测试名等信息，返回与 Maven 解析器一致的数据结构。
+
+    输入参数：
+        returncode:
+            Gradle 进程退出码。
+        output:
+            Gradle 标准输出与标准错误合并后的文本。
+
+    返回值：
+        dict:
+            与 `parse_maven_result()` 相同结构的解析结果字典。
+
+    使用示例：
+        >>> parse_gradle_result(0, "3 tests completed, 0 failed\\nBUILD SUCCESSFUL")
+        {'compiled': True, 'compile_errors': '', 'passed': True, 'test_output': '3 tests completed, 0 failed\\nBUILD SUCCESSFUL', 'failed_tests': []}
     """
     has_compile_failure = bool(_GRADLE_COMPILE_FAILED.search(output))
     compiled = not has_compile_failure
@@ -154,7 +182,30 @@ def parse_gradle_result(returncode: int, output: str) -> dict:
 # ---------------------------------------------------------------------------
 
 def parse_build_result(build_tool: str, returncode: int, output: str) -> dict:
-    """Dispatch to the appropriate parser based on *build_tool*."""
+    """按构建工具类型分发输出解析逻辑。
+
+    功能简介：
+        根据 `build_tool` 的取值调用 Maven 或 Gradle 对应的输出解析函数。
+
+    输入参数：
+        build_tool:
+            构建工具类型，支持 `maven` 或 `gradle`。
+        returncode:
+            构建命令退出码。
+        output:
+            构建命令输出文本。
+
+    返回值：
+        dict:
+            结构化解析结果字典。
+
+    使用示例：
+        >>> parse_build_result("maven", 0, "[INFO] BUILD SUCCESS")
+
+    异常：
+        ValueError:
+            当 `build_tool` 不是已支持的构建工具时抛出。
+    """
     if build_tool == "maven":
         return parse_maven_result(returncode, output)
     if build_tool == "gradle":

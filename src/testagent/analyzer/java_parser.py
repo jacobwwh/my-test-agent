@@ -24,6 +24,24 @@ _SOURCE_DIRS = ("src/main/java", "src/java", "src")
 
 
 def _make_parser() -> ts.Parser:
+    """创建 Java 语法解析器。
+
+    功能简介：
+        基于预先初始化好的 `JAVA_LANGUAGE` 构造一个 tree-sitter 解析器，
+        供后续 Java 源码 AST 解析使用。
+
+    输入参数：
+        无。
+
+    返回值：
+        ts.Parser:
+            可用于解析 Java 源码的解析器实例。
+
+    使用示例：
+        >>> parser = _make_parser()
+        >>> isinstance(parser, ts.Parser)
+        True
+    """
     return ts.Parser(JAVA_LANGUAGE)
 
 
@@ -32,10 +50,25 @@ def _make_parser() -> ts.Parser:
 # ---------------------------------------------------------------------------
 
 def find_java_file(project_path: Path, class_name: str) -> Path | None:
-    """Locate the .java file for a fully-qualified class name.
+    """按全限定类名定位 Java 源文件。
 
-    Searches standard Maven/Gradle source directories inside *project_path*.
-    Returns the first match or ``None``.
+    功能简介：
+        在常见的 Maven / Gradle 源码目录中查找目标类对应的 `.java` 文件，
+        找到后返回第一个匹配路径；如果不存在则返回 `None`。
+
+    输入参数：
+        project_path:
+            Java 项目根目录。
+        class_name:
+            目标类的全限定类名，例如 `com.example.service.OrderService`。
+
+    返回值：
+        Path | None:
+            命中的 Java 源文件路径；如果未找到则返回 `None`。
+
+    使用示例：
+        >>> find_java_file(Path("/repo/demo"), "com.example.Calculator")
+        Path("/repo/demo/src/main/java/com/example/Calculator.java")
     """
     relative = class_name.replace(".", "/") + ".java"
     for src_dir in _SOURCE_DIRS:
@@ -50,19 +83,75 @@ def find_java_file(project_path: Path, class_name: str) -> Path | None:
 # ---------------------------------------------------------------------------
 
 def parse_source(source: bytes) -> ts.Node:
-    """Parse Java source bytes and return the root AST node."""
+    """将 Java 源码字节串解析为 AST 根节点。
+
+    功能简介：
+        使用 tree-sitter Java 语法对输入源码进行解析，并返回语法树根节点，
+        供后续提取 package、imports、类声明和方法声明等结构化信息。
+
+    输入参数：
+        source:
+            Java 源码的字节内容，通常来自 `Path.read_bytes()`。
+
+    返回值：
+        ts.Node:
+            语法树的根节点。
+
+    使用示例：
+        >>> root = parse_source(b"package com.example; class A {}")
+        >>> root.type
+        'program'
+    """
     parser = _make_parser()
     tree = parser.parse(source)
     return tree.root_node
 
 
 def _node_text(node: ts.Node) -> str:
-    """Decode the source text of an AST node."""
+    """读取 AST 节点对应的源码文本。
+
+    功能简介：
+        将 tree-sitter 节点持有的原始字节内容解码为 UTF-8 字符串；
+        当节点没有文本内容时返回空字符串。
+
+    输入参数：
+        node:
+            需要读取源码片段的 AST 节点。
+
+    返回值：
+        str:
+            节点对应的源码文本。
+
+    使用示例：
+        >>> root = parse_source(b"class A {}")
+        >>> _node_text(root)
+        'class A {}'
+    """
     return node.text.decode("utf-8") if node.text else ""
 
 
 def _find_children(node: ts.Node, type_name: str) -> list[ts.Node]:
-    """Return all direct children of *node* with the given type."""
+    """筛选指定类型的直接子节点。
+
+    功能简介：
+        遍历一个 AST 节点的直接子节点，返回所有 `type` 等于目标类型的节点，
+        不做递归搜索。
+
+    输入参数：
+        node:
+            待搜索的父节点。
+        type_name:
+            目标节点类型名，例如 `import_declaration`。
+
+    返回值：
+        list[ts.Node]:
+            所有匹配的直接子节点列表；若没有匹配则返回空列表。
+
+    使用示例：
+        >>> root = parse_source(b"import a.B; import c.D; class A {}")
+        >>> len(_find_children(root, "import_declaration"))
+        2
+    """
     return [c for c in node.children if c.type == type_name]
 
 
@@ -71,7 +160,25 @@ def _find_children(node: ts.Node, type_name: str) -> list[ts.Node]:
 # ---------------------------------------------------------------------------
 
 def extract_package(root: ts.Node) -> str:
-    """Return the package declaration string (e.g. ``"com.example"``)."""
+    """提取 Java 文件中的 package 名称。
+
+    功能简介：
+        从编译单元根节点中查找 `package_declaration`，提取包名文本；
+        如果源码未声明 package，则返回空字符串。
+
+    输入参数：
+        root:
+            Java 编译单元的 AST 根节点。
+
+    返回值：
+        str:
+            包名，例如 `com.example.service`；若不存在则为空字符串。
+
+    使用示例：
+        >>> root = parse_source(b"package com.example; class A {}")
+        >>> extract_package(root)
+        'com.example'
+    """
     for child in root.children:
         if child.type == "package_declaration":
             # The scoped_identifier / identifier child holds the name.
@@ -82,7 +189,25 @@ def extract_package(root: ts.Node) -> str:
 
 
 def extract_imports(root: ts.Node) -> list[str]:
-    """Return all import statements as strings."""
+    """提取 Java 文件中的 import 语句。
+
+    功能简介：
+        收集编译单元根节点下的所有 `import_declaration`，
+        按源码原样返回 import 语句列表。
+
+    输入参数：
+        root:
+            Java 编译单元的 AST 根节点。
+
+    返回值：
+        list[str]:
+            import 语句列表，例如 `["import java.util.List;"]`。
+
+    使用示例：
+        >>> root = parse_source(b"import java.util.List; class A {}")
+        >>> extract_imports(root)
+        ['import java.util.List;']
+    """
     imports: list[str] = []
     for child in root.children:
         if child.type == "import_declaration":
@@ -95,7 +220,27 @@ def extract_imports(root: ts.Node) -> list[str]:
 # ---------------------------------------------------------------------------
 
 def _find_class_node(root: ts.Node, simple_name: str) -> ts.Node | None:
-    """Find the class_declaration node matching *simple_name*."""
+    """按简单类名查找类声明节点。
+
+    功能简介：
+        在编译单元根节点的直接子节点中查找 `class_declaration`，
+        返回类名等于指定简单类名的那个节点。
+
+    输入参数：
+        root:
+            Java 编译单元的 AST 根节点。
+        simple_name:
+            类的简单名称，例如 `OrderService`。
+
+    返回值：
+        ts.Node | None:
+            匹配的类声明节点；未找到时返回 `None`。
+
+    使用示例：
+        >>> root = parse_source(b"class A {} class B {}")
+        >>> _find_class_node(root, "B").type
+        'class_declaration'
+    """
     for child in root.children:
         if child.type == "class_declaration":
             name_node = child.child_by_field_name("name")
@@ -105,7 +250,28 @@ def _find_class_node(root: ts.Node, simple_name: str) -> ts.Node | None:
 
 
 def find_method_node(class_node: ts.Node, method_name: str) -> ts.Node | None:
-    """Find a method_declaration inside *class_node* by name."""
+    """在类声明中按名称查找方法节点。
+
+    功能简介：
+        遍历类体中的成员节点，返回方法名等于目标名称的
+        `method_declaration` 节点。
+
+    输入参数：
+        class_node:
+            类声明 AST 节点。
+        method_name:
+            目标方法名，例如 `process`。
+
+    返回值：
+        ts.Node | None:
+            匹配的方法声明节点；若不存在则返回 `None`。
+
+    使用示例：
+        >>> root = parse_source(b"class A { void run() {} }")
+        >>> cls = _find_class_node(root, "A")
+        >>> find_method_node(cls, "run").type
+        'method_declaration'
+    """
     body = class_node.child_by_field_name("body")
     if body is None:
         return None
@@ -118,7 +284,26 @@ def find_method_node(class_node: ts.Node, method_name: str) -> ts.Node | None:
 
 
 def list_method_names(class_node: ts.Node) -> list[str]:
-    """Return names of all methods declared in *class_node*."""
+    """列出类中声明的所有方法名。
+
+    功能简介：
+        读取类体中的全部 `method_declaration` 成员，
+        并按出现顺序返回方法名称列表。
+
+    输入参数：
+        class_node:
+            类声明 AST 节点。
+
+    返回值：
+        list[str]:
+            方法名列表；若类体为空则返回空列表。
+
+    使用示例：
+        >>> root = parse_source(b"class A { void a() {} int b() { return 1; } }")
+        >>> cls = _find_class_node(root, "A")
+        >>> list_method_names(cls)
+        ['a', 'b']
+    """
     body = class_node.child_by_field_name("body")
     if body is None:
         return []
@@ -148,7 +333,26 @@ class TypeRefs:
 
 
 def _collect_type_identifiers(node: ts.Node) -> list[str]:
-    """Recursively collect all ``type_identifier`` texts under *node*."""
+    """递归收集节点下出现的类型标识符。
+
+    功能简介：
+        深度遍历输入节点及其后代节点，提取所有 `type_identifier`
+        对应的源码文本，用于后续依赖解析。
+
+    输入参数：
+        node:
+            起始 AST 节点。
+
+    返回值：
+        list[str]:
+            按遍历顺序收集到的类型名列表。
+
+    使用示例：
+        >>> root = parse_source(b"class A { List<String> names; }")
+        >>> cls = _find_class_node(root, "A")
+        >>> _collect_type_identifiers(cls)
+        ['List', 'String']
+    """
     results: list[str] = []
     if node.type == "type_identifier":
         results.append(_node_text(node))
@@ -158,7 +362,30 @@ def _collect_type_identifiers(node: ts.Node) -> list[str]:
 
 
 def extract_type_refs(class_node: ts.Node, method_node: ts.Node | None) -> TypeRefs:
-    """Extract type references from a class declaration and optionally a method."""
+    """提取类和方法中引用到的类型信息。
+
+    功能简介：
+        从类声明中提取父类、接口、字段类型，并在提供方法节点时继续提取
+        返回类型、参数类型以及方法体中引用的类型，最终汇总为 `TypeRefs`。
+
+    输入参数：
+        class_node:
+            目标类的 AST 节点。
+        method_node:
+            目标方法的 AST 节点；若为 `None`，则只提取类级别类型引用。
+
+    返回值：
+        TypeRefs:
+            分类整理后的类型引用结果。
+
+    使用示例：
+        >>> root = parse_source(b"class A extends B { List<C> run(D d) { E e = null; return null; } }")
+        >>> cls = _find_class_node(root, "A")
+        >>> method = find_method_node(cls, "run")
+        >>> refs = extract_type_refs(cls, method)
+        >>> refs.superclass
+        'B'
+    """
     refs = TypeRefs()
 
     # Superclass
@@ -215,7 +442,25 @@ def extract_type_refs(class_node: ts.Node, method_node: ts.Node | None) -> TypeR
 
 
 def all_referenced_types(refs: TypeRefs) -> set[str]:
-    """Return the deduplicated set of all type names in *refs*."""
+    """合并并去重所有类型引用名称。
+
+    功能简介：
+        将 `TypeRefs` 中各类别的类型名合并为一个去重集合，
+        便于后续统一做依赖解析。
+
+    输入参数：
+        refs:
+            由 `extract_type_refs()` 生成的类型引用对象。
+
+    返回值：
+        set[str]:
+            去重后的类型名集合。
+
+    使用示例：
+        >>> refs = TypeRefs(field_types=["List"], param_types=["Order"], return_type="Result")
+        >>> sorted(all_referenced_types(refs))
+        ['List', 'Order', 'Result']
+    """
     types: set[str] = set()
     types.update(refs.field_types)
     types.update(refs.param_types)
@@ -246,23 +491,35 @@ class ParseResult:
 
 
 def parse_target(project_path: Path, class_name: str, method_name: str) -> ParseResult:
-    """Parse a Java file and extract information about a target method.
+    """解析目标类并提取目标方法分析结果。
 
-    Parameters
-    ----------
-    project_path:
-        Root of the Java project.
-    class_name:
-        Fully-qualified class name, e.g. ``"com.example.MyService"``.
-    method_name:
-        Name of the method to analyse.
+    功能简介：
+        根据项目根目录、全限定类名和方法名定位 Java 文件，解析 AST，
+        并提取包名、导入语句、类源码、方法源码以及类型引用等信息，
+        作为分析阶段的统一输出。
 
-    Raises
-    ------
-    FileNotFoundError
-        If the .java file for *class_name* cannot be found.
-    ValueError
-        If the class or method cannot be located inside the file.
+    输入参数：
+        project_path:
+            Java 项目根目录。
+        class_name:
+            目标类的全限定类名，例如 `com.example.MyService`。
+        method_name:
+            目标方法名称，例如 `processOrder`。
+
+    返回值：
+        ParseResult:
+            包含 package、imports、类源码、方法源码、类型引用和文件路径的结果对象。
+
+    使用示例：
+        >>> result = parse_target(Path("/repo/demo"), "com.example.Calculator", "add")
+        >>> result.package
+        'com.example'
+
+    异常：
+        FileNotFoundError:
+            当目标类对应的 `.java` 文件不存在时抛出。
+        ValueError:
+            当类或方法在源码中不存在时抛出。
     """
     file_path = find_java_file(project_path, class_name)
     if file_path is None:
