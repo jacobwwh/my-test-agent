@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from testagent.executor.coverage import (
+    _branch_coverage_ratio,
     _class_xml_name,
     _coverage_ratio,
     _find_class_node,
@@ -112,6 +113,9 @@ class TestHelpers:
 
     def test_coverage_ratio_no_data(self):
         assert _coverage_ratio(0, 0) == pytest.approx(0.0)
+
+    def test_branch_coverage_ratio_no_data_is_satisfied(self):
+        assert _branch_coverage_ratio(0, 0) == pytest.approx(1.0)
 
 
 # ---------------------------------------------------------------------------
@@ -223,12 +227,28 @@ class TestParseJacocoXml:
         report = parse_jacoco_xml(empty_class_xml, "com.example.Empty")
         assert report is not None
         assert report.line_coverage == pytest.approx(0.0)
-        assert report.branch_coverage == pytest.approx(0.0)
+        assert report.branch_coverage == pytest.approx(1.0)
 
     def test_full_coverage(self, jacoco_xml):
         # OrderService has missed=0 branches → branch_coverage=1.0
         report = parse_jacoco_xml(jacoco_xml, "com.example.service.OrderService")
         assert report.branch_coverage == pytest.approx(1.0)
+
+    def test_method_without_branches_is_treated_as_fully_covered(self, jacoco_xml):
+        report = parse_jacoco_xml(jacoco_xml, "com.example.Calculator", "add")
+        assert report is not None
+        assert report.line_coverage == pytest.approx(1.0)
+        assert report.branch_coverage == pytest.approx(1.0)
+        assert report.uncovered_lines == []
+        assert report.uncovered_branches == []
+
+    def test_method_filters_uncovered_details_to_its_own_lines(self, jacoco_xml):
+        report = parse_jacoco_xml(jacoco_xml, "com.example.Calculator", "divide")
+        assert report is not None
+        assert report.line_coverage == pytest.approx(2 / 3)
+        assert report.branch_coverage == pytest.approx(0.5)
+        assert report.uncovered_lines == [10]
+        assert report.uncovered_branches == ["Line 9: 1/2 branch(es) not covered"]
 
 
 # ---------------------------------------------------------------------------

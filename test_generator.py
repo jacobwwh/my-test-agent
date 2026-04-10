@@ -1,25 +1,27 @@
 """End-to-end integration test: Analyzer -> Generator.
 
-Runs the full analysis + test-generation pipeline against the sample Java
-project under ``under_test/sample-java-project`` and writes the generated
-tests to ``generated_tests/<project-name>/``.
+Runs the full analysis + test-generation pipeline against a Java project and
+writes the generated tests to ``generated_tests/<project-name>/``. By default
+it uses ``under_test/sample-java-project``, but the project root can be
+overridden via config or CLI.
 
 Usage::
 
     python test_generator.py                         # run all targets
     python test_generator.py --target Calculator.add  # single target
+    python test_generator.py --class com.example.Calculator --method add
     python test_generator.py --list                   # list available targets
 """
 
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 import time
 from pathlib import Path
 
 from testagent.analyzer import JavaAnalyzer
+from testagent.cli_utils import resolve_project_path, resolve_targets
 from testagent.config import load_config
 from testagent.generator.test_generator import TestGenerator
 
@@ -39,6 +41,8 @@ DEFAULT_TARGETS = [
     ("com.example.service.OrderService", "findOrder"),
     ("com.example.service.OrderService", "calculateTotal"),
 ]
+
+PRESET_TARGETS = DEFAULT_TARGETS
 
 
 # ---------------------------------------------------------------------------
@@ -148,8 +152,18 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--project",
         type=Path,
-        default=SAMPLE_PROJECT,
-        help="Path to the Java project under test",
+        default=None,
+        help="Path to the Java project under test (overrides config/default)",
+    )
+    p.add_argument(
+        "--class",
+        dest="class_name",
+        help="Fully-qualified class name for an arbitrary target (e.g. com.example.Calculator)",
+    )
+    p.add_argument(
+        "--method",
+        dest="method_name",
+        help="Method name to analyze together with --class",
     )
     p.add_argument("--model", help="Override LLM model name")
     return p.parse_args()
@@ -157,40 +171,37 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    project_path: Path = args.project
-    project_name = project_path.name
 
     # --- List mode ---
     if args.list:
-        print("Available targets:")
-        for cls, method in DEFAULT_TARGETS:
+        print("Preset targets:")
+        for cls, method in PRESET_TARGETS:
             print(f"  {_short_name(cls)}.{method}  ({cls})")
+        print("\nFor arbitrary projects, use --class <fully.qualified.Class> --method <methodName>.")
         return
-
-    # --- Resolve targets ---
-    if args.target:
-        # Match "Calculator.add" or "OrderService.process"
-        simple_cls, _, method = args.target.partition(".")
-        if not method:
-            print(f"Error: target must be 'ClassName.methodName', got '{args.target}'")
-            sys.exit(1)
-        matched = [
-            (c, m)
-            for c, m in DEFAULT_TARGETS
-            if _short_name(c) == simple_cls and m == method
-        ]
-        if not matched:
-            print(f"Error: target '{args.target}' not found. Use --list to see options.")
-            sys.exit(1)
-        targets = matched
-    else:
-        targets = DEFAULT_TARGETS
 
     # --- Config ---
     overrides = {}
     if args.model:
         overrides["model"] = args.model
+    if args.project is not None:
+        overrides["project_path"] = str(args.project)
     config = load_config(**overrides)
+    project_path = resolve_project_path(args.project, config.project_path, SAMPLE_PROJECT)
+    project_name = project_path.name
+
+    # --- Resolve targets ---
+    try:
+        targets = resolve_targets(
+            target=args.target,
+            class_name=args.class_name,
+            method_name=args.method_name,
+            default_targets=PRESET_TARGETS,
+            short_name=_short_name,
+        )
+    except ValueError as exc:
+        print(f"Error: {exc}")
+        sys.exit(1)
 
     if not config.api_key:
         print("Error: No API key configured.")

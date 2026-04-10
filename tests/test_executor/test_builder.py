@@ -46,6 +46,13 @@ public class FooTest {
 }
 """
 
+PACKAGE_PRIVATE_TEST_CODE = """\
+package com.example.service;
+
+class OrderServiceTest {
+}
+"""
+
 
 # ---------------------------------------------------------------------------
 # detect_build_tool
@@ -116,8 +123,11 @@ class TestExtractFromCode:
     def test_extract_class_name_no_package(self):
         assert extract_class_name_from_code(NO_PACKAGE_TEST_CODE) == "FooTest"
 
+    def test_extract_class_name_package_private(self):
+        assert extract_class_name_from_code(PACKAGE_PRIVATE_TEST_CODE) == "OrderServiceTest"
+
     def test_extract_class_name_raises_when_missing(self):
-        with pytest.raises(ValueError, match="Cannot find 'public class'"):
+        with pytest.raises(ValueError, match="Cannot find class declaration"):
             extract_class_name_from_code("interface Foo {}")
 
 
@@ -204,6 +214,13 @@ class TestWriteTestFile:
         bad_code = "package com.example;\ninterface Foo {}"
         with pytest.raises(ValueError):
             write_test_file(bad_code, tmp_path, "com.example.Foo", "bar", 1)
+
+    def test_accepts_package_private_test_class(self, tmp_path):
+        dest = write_test_file(
+            PACKAGE_PRIVATE_TEST_CODE, tmp_path, "com.example.service.OrderService", "process", 1,
+        )
+        assert dest.name == "OrderServiceTest.java"
+        assert "class OrderServiceTest" in dest.read_text()
 
 
 # ---------------------------------------------------------------------------

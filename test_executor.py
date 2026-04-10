@@ -1,12 +1,14 @@
 """End-to-end pipeline: Analyzer → Generator → Executor (with iterative refinement).
 
-Runs the full test-generation-and-execution loop against the sample Java project
-under ``under_test/sample-java-project``.
+Runs the full test-generation-and-execution loop against a Java project.
+By default it targets ``under_test/sample-java-project``, but the project root
+can be overridden via config or CLI.
 
 Usage::
 
     python test_executor.py                           # run all default targets
     python test_executor.py --target Calculator.add   # single target
+    python test_executor.py --class com.example.Calculator --method add
     python test_executor.py --list                    # list available targets
     python test_executor.py --max-iterations 3        # override iteration limit
     python test_executor.py --keep-test               # leave test files in project
@@ -20,6 +22,7 @@ import time
 from pathlib import Path
 
 from testagent.analyzer import JavaAnalyzer
+from testagent.cli_utils import resolve_project_path, resolve_targets
 from testagent.config import load_config
 from testagent.executor import TestExecutor
 from testagent.generator.test_generator import TestGenerator
@@ -40,6 +43,8 @@ DEFAULT_TARGETS = [
     ("com.example.service.OrderService", "findOrder"),  #line coverage 100%, branch coverage 0%?
     ("com.example.service.OrderService", "calculateTotal"),
 ]
+
+PRESET_TARGETS = DEFAULT_TARGETS
 
 
 # ---------------------------------------------------------------------------
@@ -232,8 +237,18 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--project",
         type=Path,
-        default=SAMPLE_PROJECT,
-        help=f"Java project path (default: {SAMPLE_PROJECT})",
+        default=None,
+        help="Java project path (overrides config/default)",
+    )
+    p.add_argument(
+        "--class",
+        dest="class_name",
+        help="Fully-qualified class name for an arbitrary target (e.g. com.example.Calculator)",
+    )
+    p.add_argument(
+        "--method",
+        dest="method_name",
+        help="Method name to analyze together with --class",
     )
     p.add_argument(
         "--model",
@@ -268,39 +283,38 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    project_path: Path = args.project
 
     # ── List mode ───────────────────────────────────────────────────
     if args.list:
-        print("Available targets:")
-        for cls, method in DEFAULT_TARGETS:
+        print("Preset targets:")
+        for cls, method in PRESET_TARGETS:
             print(f"  {_short(cls)}.{method:<20}  ({cls})")
+        print("\nFor arbitrary projects, use --class <fully.qualified.Class> --method <methodName>.")
         return
-
-    # ── Resolve targets ─────────────────────────────────────────────
-    if args.target:
-        simple_cls, _, method = args.target.partition(".")
-        if not method:
-            print(f"Error: target must be 'ClassName.methodName', got '{args.target}'")
-            sys.exit(1)
-        targets = [
-            (c, m) for c, m in DEFAULT_TARGETS
-            if _short(c) == simple_cls and m == method
-        ]
-        if not targets:
-            print(f"Error: '{args.target}' not found. Use --list to see options.")
-            sys.exit(1)
-    else:
-        targets = DEFAULT_TARGETS
 
     # ── Config ──────────────────────────────────────────────────────
     overrides = {k: v for k, v in {
         "model": args.model,
+        "project_path": str(args.project) if args.project is not None else None,
         "max_iterations": args.max_iterations,
         "keep_test": args.keep_test,
         "min_branch_coverage": args.min_branch_coverage,
     }.items() if v is not None}
     config = load_config(**overrides)
+    project_path = resolve_project_path(args.project, config.project_path, SAMPLE_PROJECT)
+
+    # ── Resolve targets ─────────────────────────────────────────────
+    try:
+        targets = resolve_targets(
+            target=args.target,
+            class_name=args.class_name,
+            method_name=args.method_name,
+            default_targets=PRESET_TARGETS,
+            short_name=_short,
+        )
+    except ValueError as exc:
+        print(f"Error: {exc}")
+        sys.exit(1)
 
     if not config.api_key:
         print("Error: No API key configured.")

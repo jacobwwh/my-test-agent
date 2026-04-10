@@ -79,11 +79,11 @@ def extract_package_from_code(test_code: str) -> str:
 
 
 def extract_class_name_from_code(test_code: str) -> str:
-    """Return the first public class name declared in *test_code*."""
-    match = re.search(r"(?m)^public\s+class\s+(\w+)", test_code)
+    """Return the first top-level class name declared in *test_code*."""
+    match = re.search(r"(?m)^\s*(?:public\s+)?class\s+(\w+)", test_code)
     if match:
         return match.group(1)
-    raise ValueError("Cannot find 'public class' declaration in generated test code.")
+    raise ValueError("Cannot find class declaration in generated test code.")
 
 
 # ---------------------------------------------------------------------------

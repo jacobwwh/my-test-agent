@@ -46,6 +46,10 @@ def load_config(
     if "timeout" in llm:
         flat["timeout"] = llm["timeout"]
 
+    project = raw.get("project", {})
+    if "path" in project:
+        flat["project_path"] = project["path"]
+
     pipeline = raw.get("pipeline", {})
     if "max_iterations" in pipeline:
         flat["max_iterations"] = pipeline["max_iterations"]

@@ -30,23 +30,23 @@ def canonical_test_class_name(class_name: str) -> str:
 
 
 def normalize_test_class_name(test_code: str, class_name: str) -> str:
-    """Rename the public class in *test_code* to match the canonical name.
+    """Rename the test class in *test_code* to match the canonical name.
 
     The LLM may produce any class name.  This function replaces the first
-    ``public class <Anything>`` declaration with the canonical name so that
+    ``class <Anything>`` declaration with the canonical name so that
     the executor can always predict the file name and the ``-Dtest=`` argument.
     """
     canonical = canonical_test_class_name(class_name)
-    # Match the first public class declaration (not abstract/interface).
+    # Match the first top-level class declaration (public or package-private).
     new_code, count = re.subn(
-        r'(?m)^(public\s+class\s+)(\w+)',
+        r'(?m)^(\s*(?:public\s+)?class\s+)(\w+)',
         lambda m: m.group(1) + canonical,
         test_code,
         count=1,
     )
     if count == 0:
         logger.warning(
-            "Could not find 'public class' declaration to normalize; "
+            "Could not find class declaration to normalize; "
             "leaving test code unchanged."
         )
     return new_code

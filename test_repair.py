@@ -27,6 +27,7 @@ import time
 from pathlib import Path
 
 from testagent.analyzer import JavaAnalyzer
+from testagent.cli_utils import resolve_project_path
 from testagent.config import load_config
 from testagent.executor import TestExecutor
 from testagent.generator.test_generator import TestGenerator
@@ -304,8 +305,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--project",
         type=Path,
-        default=SAMPLE_PROJECT,
-        help=f"Java project path (default: {SAMPLE_PROJECT})",
+        default=None,
+        help="Java project path (overrides config/default)",
     )
     p.add_argument(
         "--model",
@@ -375,6 +376,7 @@ def main() -> None:
     # --- Config ---
     overrides = {k: v for k, v in {
         "model": args.model,
+        "project_path": str(args.project) if args.project is not None else None,
         "max_iterations": args.max_iterations,
         "keep_test": args.keep_test,
         "min_branch_coverage": args.min_branch_coverage,
@@ -386,13 +388,14 @@ def main() -> None:
         print("  Set YUNWU_API_KEY environment variable, or set llm.api_key in configs/default.yaml")
         sys.exit(1)
 
-    project_name = args.project.name
+    project_path = resolve_project_path(args.project, config.project_path, SAMPLE_PROJECT)
+    project_name = project_path.name
 
     print(_sep())
     print("  Pipeline: (existing test) → Executor → Refine → Executor → ...")
     print(_sep())
     print(f"  Failed test dir: {failed_dir}")
-    print(f"  Project:         {args.project}")
+    print(f"  Project:         {project_path}")
     print(f"  Output dir:      {OUTPUT_ROOT / project_name}")
     print(f"  API:             {config.api_base_url}")
     print(f"  Model:           {config.model}")
@@ -403,7 +406,7 @@ def main() -> None:
     print(f"  Files:           {len(files)}")
 
     # --- Build modules ---
-    analyzer = JavaAnalyzer(args.project)
+    analyzer = JavaAnalyzer(project_path)
     generator = TestGenerator(
         api_base_url=config.api_base_url,
         api_key=config.api_key,
@@ -411,7 +414,7 @@ def main() -> None:
         timeout=config.timeout,
     )
     executor = TestExecutor(
-        project_path=args.project,
+        project_path=project_path,
         reports_dir=args.reports_dir,
         keep_test=config.keep_test,
     )

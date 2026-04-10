@@ -15,6 +15,9 @@ llm:
   model: "qwen3.5-397b-a17b"
   timeout: 120                           # LLM 请求超时（秒）
 
+project:
+  path: ""                               # 被测 Java 项目根目录；留空则使用内置 sample 项目
+
 pipeline:
   max_iterations: 5                      # 最大迭代优化次数
   min_branch_coverage: 1.0               # 目标分支覆盖率（0.0–1.0）
@@ -32,12 +35,30 @@ export YUNWU_API_KEY="your-api-key"
 
 环境变量 `YUNWU_API_KEY` 优先于配置文件中的 `llm.api_key`。
 
+### 设置被测项目根目录
+
+项目根目录优先级如下：
+
+1. CLI 参数 `--project`
+2. 配置文件 `project.path`
+3. 默认示例项目 `under_test/sample-java-project`
+
+示例：
+
+```yaml
+project:
+  path: "/path/to/java-project"
+```
+
 ### CLI 参数覆盖
 
 所有脚本支持通过命令行参数覆盖配置文件中的值，CLI 参数优先级最高。常用参数包括：
 
 | 参数 | 说明 |
 |------|------|
+| `--target` | 使用预设目标，例如 `Calculator.add` |
+| `--class` | 指定任意目标的全限定类名，例如 `com.example.Calculator` |
+| `--method` | 与 `--class` 搭配，指定目标方法名 |
 | `--model` | 覆盖 LLM 模型名称 |
 | `--max-iterations` | 覆盖最大迭代次数 |
 | `--keep-test` | 执行后保留测试文件 |
@@ -76,6 +97,9 @@ python test_generator.py
 # 为单个目标生成测试
 python test_generator.py --target Calculator.add
 
+# 为任意项目中的任意方法生成测试
+python test_generator.py --project /path/to/java-project --class com.acme.OrderService --method submit
+
 # 使用指定模型
 python test_generator.py --target Calculator.divide --model gpt-4o
 ```
@@ -99,6 +123,9 @@ python test_executor.py --keep-test --min-branch-coverage 0.8
 
 # 自定义项目路径和报告目录
 python test_executor.py --project /path/to/java-project --reports-dir /tmp/reports
+
+# 执行任意项目中的指定类方法
+python test_executor.py --project /path/to/java-project --class com.acme.OrderService --method submit
 ```
 
 ### test_repair.py — 修复已有失败测试
@@ -117,9 +144,14 @@ python test_repair.py --file CalculatorTest_partial_coverage.java
 
 # 限制迭代次数并保留测试文件
 python test_repair.py --file CalculatorTest_failing.java --max-iterations 3 --keep-test
+
+# 使用配置文件之外的被测项目根目录
+python test_repair.py --project /path/to/java-project --file CalculatorTest_failing.java
 ```
 
 ## 预设测试目标
+
+以下目标仅针对内置示例项目有效。对于任意外部项目，请使用 `--class` 和 `--method` 指定目标。
 
 | 目标 | 类 |
 |------|-----|
@@ -131,7 +163,30 @@ python test_repair.py --file CalculatorTest_failing.java --max-iterations 3 --ke
 
 ## 环境要求
 
-- Python 3.11+
+- Python 3.10+（与 `pyproject.toml` 中 `requires-python = ">=3.10"` 一致）
 - Java 11+（被测项目编译执行）
 - Maven 或 Gradle（构建工具）
 - LLM API 访问（OpenAI API 兼容端点）
+
+### Python 运行时依赖
+
+以下依赖来自 `pyproject.toml` 的 `project.dependencies`：
+
+| 库 | 版本要求 | 用途 |
+|------|------|------|
+| `tree-sitter` | `>=0.20` | 解析源码语法树 |
+| `tree-sitter-java` | 未显式限制版本 | Java 语法支持 |
+| `openai` | `>=1.0` | 调用 OpenAI 兼容 LLM API |
+| `click` | `>=8.0` | CLI 支持 |
+| `PyYAML` | `>=6.0` | 读取 YAML 配置 |
+| `Jinja2` | `>=3.0` | 生成 Prompt 模板 |
+
+### Python 开发/测试依赖
+
+以下依赖来自 `pyproject.toml` 的 `project.optional-dependencies.dev`：
+
+| 库 | 版本要求 | 用途 |
+|------|------|------|
+| `pytest` | `>=7.0` | 单元测试 |
+| `pytest-cov` | 未显式限制版本 | 测试覆盖率统计 |
+| `pytest-mock` | 未显式限制版本 | 测试中的 mock 支持 |

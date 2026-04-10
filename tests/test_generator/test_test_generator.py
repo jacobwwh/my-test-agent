@@ -13,7 +13,7 @@ from testagent.models import (
     TargetMethod,
     TestResult,
 )
-from testagent.generator.test_generator import TestGenerator
+from testagent.generator.test_generator import TestGenerator, normalize_test_class_name
 
 
 @pytest.fixture
@@ -203,3 +203,16 @@ class TestTestGenerator:
         assert "50.0%" in content
         assert "30.0%" in content
         assert "else branch" in content
+
+
+def test_normalize_test_class_name_accepts_package_private_class():
+    test_code = (
+        "package com.example.service;\n\n"
+        "class WrongName {\n"
+        "}\n"
+    )
+
+    normalized = normalize_test_class_name(test_code, "com.example.service.OrderService")
+
+    assert "class OrderServiceTest" in normalized
+    assert "class WrongName" not in normalized

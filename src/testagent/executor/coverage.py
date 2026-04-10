@@ -50,6 +50,12 @@ def _coverage_ratio(missed: int, covered: int) -> float:
     return covered / total if total > 0 else 0.0
 
 
+def _branch_coverage_ratio(missed: int, covered: int) -> float:
+    """Return branch coverage, treating 'no branches' as fully satisfied."""
+    total = missed + covered
+    return covered / total if total > 0 else 1.0
+
+
 # ---------------------------------------------------------------------------
 # Find the target class node in the XML
 # ---------------------------------------------------------------------------
@@ -89,25 +95,44 @@ def _find_sourcefile_node(root: ET.Element, class_name: str) -> ET.Element | Non
 # Uncovered lines / branches
 # ---------------------------------------------------------------------------
 
-def _uncovered_lines(sourcefile_node: ET.Element) -> list[int]:
+def _line_in_range(line_nr: int, line_range: tuple[int, int] | None) -> bool:
+    """Return whether *line_nr* falls inside *line_range* when provided."""
+    if line_range is None:
+        return True
+    start, end = line_range
+    return start <= line_nr <= end
+
+
+def _uncovered_lines(
+    sourcefile_node: ET.Element,
+    line_range: tuple[int, int] | None = None,
+) -> list[int]:
     """Return line numbers with no covered instructions (``ci == 0``)."""
     uncovered: list[int] = []
     for line in sourcefile_node.findall("line"):
+        nr = int(line.get("nr", 0))
+        if not _line_in_range(nr, line_range):
+            continue
         ci = int(line.get("ci", 0))
         mi = int(line.get("mi", 0))
         if ci == 0 and mi > 0:
-            uncovered.append(int(line.get("nr", 0)))
+            uncovered.append(nr)
     return sorted(uncovered)
 
 
-def _uncovered_branches(sourcefile_node: ET.Element) -> list[str]:
+def _uncovered_branches(
+    sourcefile_node: ET.Element,
+    line_range: tuple[int, int] | None = None,
+) -> list[str]:
     """Return human-readable descriptions of lines with missed branches."""
     descriptions: list[str] = []
     for line in sourcefile_node.findall("line"):
+        nr = int(line.get("nr", 0))
+        if not _line_in_range(nr, line_range):
+            continue
         mb = int(line.get("mb", 0))  # missed branches
         cb = int(line.get("cb", 0))  # covered branches
         if mb > 0:
-            nr = line.get("nr", "?")
             total = mb + cb
             descriptions.append(
                 f"Line {nr}: {mb}/{total} branch(es) not covered"
@@ -123,6 +148,47 @@ def _find_method_node(
         if method.get("name") == method_name:
             return method
     return None
+
+
+def _method_line_range(
+    class_node: ET.Element,
+    method_name: str,
+    sourcefile_node: ET.Element,
+) -> tuple[int, int] | None:
+    """Estimate the source line range occupied by *method_name*.
+
+    JaCoCo XML exposes a start line for each method but not an explicit end
+    line, so we approximate the end as the line before the next method starts.
+    For the last method we use the last source line present in the file.
+    """
+    methods_with_lines: list[tuple[int, str]] = []
+    for method in class_node.findall("method"):
+        line_text = method.get("line")
+        if line_text and line_text.isdigit():
+            methods_with_lines.append((int(line_text), method.get("name", "")))
+
+    if not methods_with_lines:
+        return None
+
+    methods_with_lines.sort()
+    target_index: int | None = None
+    for index, (_, current_name) in enumerate(methods_with_lines):
+        if current_name == method_name:
+            target_index = index
+            break
+    if target_index is None:
+        return None
+
+    start_line = methods_with_lines[target_index][0]
+    last_line = max(
+        (int(line.get("nr", 0)) for line in sourcefile_node.findall("line")),
+        default=start_line,
+    )
+    if target_index + 1 < len(methods_with_lines):
+        end_line = methods_with_lines[target_index + 1][0] - 1
+    else:
+        end_line = last_line
+    return start_line, max(start_line, end_line)
 
 
 # ---------------------------------------------------------------------------
@@ -187,15 +253,18 @@ def parse_jacoco_xml(
     branch_missed, branch_covered = _counter_values(counter_node, _BRANCH)
 
     line_coverage = _coverage_ratio(line_missed, line_covered)
-    branch_coverage = _coverage_ratio(branch_missed, branch_covered)
+    branch_coverage = _branch_coverage_ratio(branch_missed, branch_covered)
 
     # Per-line details come from the <sourcefile> element.
     sourcefile_node = _find_sourcefile_node(root, class_name)
     uncovered_lines: list[int] = []
     uncovered_branches: list[str] = []
     if sourcefile_node is not None:
-        uncovered_lines = _uncovered_lines(sourcefile_node)
-        uncovered_branches = _uncovered_branches(sourcefile_node)
+        line_range = None
+        if method_name and method_node is not None:
+            line_range = _method_line_range(class_node, method_name, sourcefile_node)
+        uncovered_lines = _uncovered_lines(sourcefile_node, line_range)
+        uncovered_branches = _uncovered_branches(sourcefile_node, line_range)
 
     return CoverageReport(
         line_coverage=line_coverage,
