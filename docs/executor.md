@@ -155,6 +155,46 @@ Maven 优先于 Gradle 检测。
 
 ---
 
+#### `cleanup_generated_tests(project_path: Path, clean_marker: str = "大模型生成") -> list[Path]`
+
+清理被测项目测试源码目录下的生成文件。
+
+**参数**：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `project_path` | `Path` | 必填 | 被测 Java 项目的根目录 |
+| `clean_marker` | `str` | `"大模型生成"` | 仅删除文件内容包含该标记的 `.java` 文件；若传入**空字符串**，则删除测试目录下的所有 `.java` 文件 |
+
+**行为**：
+
+1. 通过 `find_test_source_dir()` 定位测试源码根目录（通常为 `src/test/java`）。
+2. 递归扫描目录下所有 `.java` 文件：
+   - `clean_marker` 非空：读取文件内容，仅删除包含该标记字符串的文件。
+   - `clean_marker` 为空字符串：直接删除所有 `.java` 文件。
+3. 删除文件后，自下而上清理遗留的空目录。
+4. 返回已删除文件的路径列表。
+
+**调用示例**：
+
+```python
+from pathlib import Path
+from testagent.executor import cleanup_generated_tests
+
+# 仅清理带"大模型生成"标记的文件（默认行为）
+deleted = cleanup_generated_tests(Path("under_test/sample-java-project"))
+
+# 清理带自定义标记的文件
+deleted = cleanup_generated_tests(Path("under_test/sample-java-project"), clean_marker="Auto-generated")
+
+# 清理测试目录下的所有测试文件
+deleted = cleanup_generated_tests(Path("under_test/sample-java-project"), clean_marker="")
+
+print(f"已删除 {len(deleted)} 个文件")
+```
+
+---
+
 #### `build_maven_command(project_path, test_class_name, package, report_dir) -> list[str]`
 
 构造 Maven 构建命令，优先使用项目本地的 `mvnw` wrapper。

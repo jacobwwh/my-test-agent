@@ -1,0 +1,137 @@
+# my-test-agent
+
+基于本地部署 LLM (使用openai API调用)的 Java 单元测试自动生成框架。通过分析被测类源码，调用大模型生成 JUnit 5 测试用例，再经由 Maven/Gradle 编译执行并收集 JaCoCo 覆盖率，最后根据编译错误、测试失败和覆盖率缺口进行迭代优化，直到测试通过且覆盖率达标。
+
+## 配置
+
+配置文件位于 `configs/default.yaml`，同时支持环境变量和 CLI 参数覆盖。
+
+### 配置文件
+
+```yaml
+llm:
+  api_base_url: "https://yunwu.ai/v1"   # OpenAI API 兼容端点
+  api_key: ""                            # 留空则从环境变量读取
+  model: "qwen3.5-397b-a17b"
+  timeout: 120                           # LLM 请求超时（秒）
+
+pipeline:
+  max_iterations: 5                      # 最大迭代优化次数
+  min_branch_coverage: 1.0               # 目标分支覆盖率（0.0–1.0）
+
+executor:
+  keep_test: false                       # 执行后是否保留测试文件
+  jacoco_enabled: true
+```
+
+### 环境变量（仅用于本机调试，实际部署中不要设置）
+
+```bash
+export YUNWU_API_KEY="your-api-key"
+```
+
+环境变量 `YUNWU_API_KEY` 优先于配置文件中的 `llm.api_key`。
+
+### CLI 参数覆盖
+
+所有脚本支持通过命令行参数覆盖配置文件中的值，CLI 参数优先级最高。常用参数包括：
+
+| 参数 | 说明 |
+|------|------|
+| `--model` | 覆盖 LLM 模型名称 |
+| `--max-iterations` | 覆盖最大迭代次数 |
+| `--keep-test` | 执行后保留测试文件 |
+| `--min-branch-coverage` | 覆盖目标分支覆盖率（0.0–1.0） |
+| `--project` | 指定被测 Java 项目路径 |
+| `--reports-dir` | 指定 JaCoCo 报告输出目录 |
+
+## 脚本说明与使用
+
+### test_analyzer.py — 分析器单元测试
+
+运行 `tests/test_analyzer/` 下的 pytest 单元测试，验证 Java 源码解析和依赖提取功能是否正确。不需要 LLM 或 Java 环境。
+
+```bash
+# 交互式选择要运行的测试
+python test_analyzer.py
+
+# 运行全部测试
+python test_analyzer.py -a
+
+# 传递额外 pytest 参数（如按关键字过滤）
+python test_analyzer.py -k "parse"
+```
+
+### test_generator.py — 分析 + 生成集成测试
+
+执行 **Analyzer -> Generator** 流程：分析被测类源码，调用 LLM 生成 JUnit 5 测试用例，将结果保存到 `generated_tests/<project-name>/`。不执行测试、不收集覆盖率。需要配置 API Key。
+
+```bash
+# 列出可用目标
+python test_generator.py --list
+
+# 为所有预设目标生成测试
+python test_generator.py
+
+# 为单个目标生成测试
+python test_generator.py --target Calculator.add
+
+# 使用指定模型
+python test_generator.py --target Calculator.divide --model gpt-4o
+```
+
+### test_executor.py — 完整流水线（生成 + 执行 + 迭代优化）
+
+执行 **Analyzer -> Generator -> Executor** 完整流程：生成测试 -> 编译执行 -> 收集覆盖率 -> 根据错误和覆盖率缺口迭代优化，直到测试通过且覆盖率达标或达到最大迭代次数。需要配置 API Key 和本地 Maven/Gradle 环境。
+
+```bash
+# 列出可用目标
+python test_executor.py --list
+
+# 运行所有预设目标
+python test_executor.py
+
+# 运行单个目标，限制迭代次数
+python test_executor.py --target Calculator.divide --max-iterations 3
+
+# 保留生成的测试文件，设置覆盖率阈值为 80%
+python test_executor.py --keep-test --min-branch-coverage 0.8
+
+# 自定义项目路径和报告目录
+python test_executor.py --project /path/to/java-project --reports-dir /tmp/reports
+```
+
+### test_repair.py — 修复已有失败测试
+
+执行 **Executor -> Refine** 修复流程：读取 `failed_test_case/` 目录下的失败测试文件，通过迭代优化修复编译错误、测试失败，并提升覆盖率。修复后的测试保存到 `generated_tests/<project-name>/`。
+
+```bash
+# 列出可修复的文件
+python test_repair.py --list
+
+# 修复所有失败测试
+python test_repair.py
+
+# 修复单个文件
+python test_repair.py --file CalculatorTest_partial_coverage.java
+
+# 限制迭代次数并保留测试文件
+python test_repair.py --file CalculatorTest_failing.java --max-iterations 3 --keep-test
+```
+
+## 预设测试目标
+
+| 目标 | 类 |
+|------|-----|
+| `Calculator.add` | `com.example.Calculator` |
+| `Calculator.divide` | `com.example.Calculator` |
+| `OrderService.process` | `com.example.service.OrderService` |
+| `OrderService.findOrder` | `com.example.service.OrderService` |
+| `OrderService.calculateTotal` | `com.example.service.OrderService` |
+
+## 环境要求
+
+- Python 3.11+
+- Java 11+（被测项目编译执行）
+- Maven 或 Gradle（构建工具）
+- LLM API 访问（OpenAI API 兼容端点）

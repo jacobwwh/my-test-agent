@@ -49,6 +49,8 @@ def load_config(
     pipeline = raw.get("pipeline", {})
     if "max_iterations" in pipeline:
         flat["max_iterations"] = pipeline["max_iterations"]
+    if "min_branch_coverage" in pipeline:
+        flat["min_branch_coverage"] = pipeline["min_branch_coverage"]
 
     executor = raw.get("executor", {})
     if "keep_test" in executor:

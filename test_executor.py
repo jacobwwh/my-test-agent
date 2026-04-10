@@ -37,7 +37,7 @@ DEFAULT_TARGETS = [
     ("com.example.Calculator", "add"),
     ("com.example.Calculator", "divide"),
     ("com.example.service.OrderService", "process"),
-    ("com.example.service.OrderService", "findOrder"),
+    ("com.example.service.OrderService", "findOrder"),  #line coverage 100%, branch coverage 0%?
     ("com.example.service.OrderService", "calculateTotal"),
 ]
 
@@ -115,6 +115,20 @@ def _print_code_preview(code: str, max_lines: int = 20) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Coverage threshold
+# ---------------------------------------------------------------------------
+
+def _coverage_met(result: TestResult, min_branch_coverage: float) -> bool:
+    """Return True if branch coverage meets or exceeds *min_branch_coverage*.
+
+    When coverage data is unavailable the check is skipped (returns True).
+    """
+    if result.coverage is None:
+        return True
+    return result.coverage.branch_coverage >= min_branch_coverage
+
+
+# ---------------------------------------------------------------------------
 # Core loop
 # ---------------------------------------------------------------------------
 
@@ -125,6 +139,7 @@ def run_one(
     generator: TestGenerator,
     executor: TestExecutor,
     max_iterations: int,
+    min_branch_coverage: float,
 ) -> bool:
     """Run the full generate → execute → refine loop for one target.
 
@@ -167,9 +182,17 @@ def run_one(
         print(f"  Execution finished in {time.time() - t0:.1f}s")
         _print_test_result(result, iteration)
 
-        if result.passed:
+        if result.passed and _coverage_met(result, min_branch_coverage):
             print(f"\n  [SUCCESS] Tests passed on iteration {iteration}.")
             break
+
+        if result.passed:
+            cov = result.coverage
+            print(
+                f"\n  Tests passed but branch coverage "
+                f"{cov.branch_coverage * 100:.1f}% < "
+                f"{min_branch_coverage * 100:.1f}%, refining for coverage..."
+            )
 
         if iteration < max_iterations:
             print(f"\n  Refining test (iteration {iteration} → {iteration + 1})...")
@@ -182,7 +205,7 @@ def run_one(
             print(f"  LLM responded in {time.time() - t0:.1f}s")
             _print_code_preview(test.test_code)
         else:
-            print(f"\n  [GIVE UP] Reached max iterations ({max_iterations}) without passing.")
+            print(f"\n  [GIVE UP] Reached max iterations ({max_iterations}).")
 
     return result is not None and result.passed
 
@@ -234,6 +257,12 @@ def parse_args() -> argparse.Namespace:
         default=REPORTS_ROOT,
         help=f"Directory for JaCoCo reports (default: {REPORTS_ROOT})",
     )
+    p.add_argument(
+        "--min-branch-coverage",
+        type=float,
+        default=None,
+        help="Minimum branch coverage (0.0–1.0) to stop iterating (default: from config)",
+    )
     return p.parse_args()
 
 
@@ -269,6 +298,7 @@ def main() -> None:
         "model": args.model,
         "max_iterations": args.max_iterations,
         "keep_test": args.keep_test,
+        "min_branch_coverage": args.min_branch_coverage,
     }.items() if v is not None}
     config = load_config(**overrides)
 
@@ -285,6 +315,7 @@ def main() -> None:
     print(f"  Model:         {config.model}")
     print(f"  Max iter:      {config.max_iterations}")
     print(f"  Keep test:     {config.keep_test}")
+    print(f"  Min branch cov: {config.min_branch_coverage * 100:.0f}%")
     print(f"  Reports dir:   {args.reports_dir}")
     print(f"  Targets:       {len(targets)}")
 
@@ -310,6 +341,7 @@ def main() -> None:
             class_name, method_name,
             analyzer, generator, executor,
             max_iterations=config.max_iterations,
+            min_branch_coverage=config.min_branch_coverage,
         )
         results.append((label, ok))
 

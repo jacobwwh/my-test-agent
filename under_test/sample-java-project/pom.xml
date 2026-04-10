@@ -17,6 +17,8 @@
     <junit.version>5.10.2</junit.version>
     <mockito.version>5.11.0</mockito.version>
     <jacoco.version>0.8.11</jacoco.version>
+    <!-- Default JaCoCo report output; overridable via -Djacoco.outputDirectory=... -->
+    <jacoco.outputDirectory>${project.reporting.outputDirectory}/jacoco</jacoco.outputDirectory>
   </properties>
 
   <dependencies>
@@ -60,6 +62,10 @@
         <groupId>org.jacoco</groupId>
         <artifactId>jacoco-maven-plugin</artifactId>
         <version>${jacoco.version}</version>
+        <configuration>
+          <!-- Allow overriding report output dir via -Djacoco.outputDirectory=... -->
+          <outputDirectory>${jacoco.outputDirectory}</outputDirectory>
+        </configuration>
         <executions>
           <!-- Attach the JaCoCo agent before tests run -->
           <execution>

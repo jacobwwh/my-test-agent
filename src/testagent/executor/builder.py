@@ -154,6 +154,64 @@ def write_test_file(
 
 
 # ---------------------------------------------------------------------------
+# Cleanup AI-generated test files
+# ---------------------------------------------------------------------------
+
+_BANNER_MARKER = "大模型生成"
+
+
+def cleanup_generated_tests(
+    project_path: Path,
+    clean_marker: str = _BANNER_MARKER,
+) -> list[Path]:
+    """Remove test files from the project's test source tree.
+
+    Parameters
+    ----------
+    project_path:
+        Root of the Java project.
+    clean_marker:
+        Only delete ``.java`` files whose content contains this marker string.
+        Defaults to ``"大模型生成"`` (the banner injected by :func:`write_test_file`).
+        If set to an **empty string**, *all* ``.java`` files under the test
+        source directory are deleted.
+
+    Returns the list of deleted file paths.
+    """
+    test_src_root = find_test_source_dir(project_path)
+    if not test_src_root.is_dir():
+        logger.info("Test source dir does not exist: %s — nothing to clean.", test_src_root)
+        return []
+
+    delete_all = clean_marker == ""
+
+    deleted: list[Path] = []
+    for java_file in test_src_root.rglob("*.java"):
+        if delete_all:
+            java_file.unlink()
+            logger.info("Deleted test file: %s", java_file)
+            deleted.append(java_file)
+            continue
+        try:
+            content = java_file.read_text(encoding="utf-8", errors="replace")
+        except OSError as exc:
+            logger.warning("Cannot read %s: %s", java_file, exc)
+            continue
+        if clean_marker in content:
+            java_file.unlink()
+            logger.info("Deleted generated test: %s", java_file)
+            deleted.append(java_file)
+
+    # Prune empty directories left behind (bottom-up).
+    for dirpath in sorted(test_src_root.rglob("*"), reverse=True):
+        if dirpath.is_dir() and not any(dirpath.iterdir()):
+            dirpath.rmdir()
+            logger.debug("Removed empty directory: %s", dirpath)
+
+    return deleted
+
+
+# ---------------------------------------------------------------------------
 # Build commands
 # ---------------------------------------------------------------------------
 
@@ -178,12 +236,15 @@ def build_maven_command(
     """Construct the Maven command to run *test_class_name* and generate a JaCoCo report."""
     mvn = _resolve_mvn(project_path)
     fully_qualified = f"{package}.{test_class_name}" if package else test_class_name
+    exec_file = report_dir / "jacoco.exec"
     return [
         mvn,
         "--batch-mode",
         "test",
         "jacoco:report",
         f"-Dtest={fully_qualified}",
+        f"-Djacoco.destFile={exec_file}",
+        f"-Djacoco.dataFile={exec_file}",
         f"-Djacoco.outputDirectory={report_dir}",
         "-DfailIfNoTests=false",
     ]
@@ -198,13 +259,16 @@ def build_gradle_command(
     """Construct the Gradle command to run *test_class_name* and generate a JaCoCo report."""
     gradle = _resolve_gradle(project_path)
     fully_qualified = f"{package}.{test_class_name}" if package else test_class_name
+    exec_file = report_dir / "jacoco.exec"
     return [
         gradle,
         "test",
         "jacocoTestReport",
         f"--tests={fully_qualified}",
-        # Pass report dir as a project property; the build.gradle must honour it.
+        # Pass report dir and exec file as project properties;
+        # the build.gradle must honour them.
         f"-PjacocoReportDir={report_dir}",
+        f"-PjacocoExecFile={exec_file}",
         "--continue",
     ]
 

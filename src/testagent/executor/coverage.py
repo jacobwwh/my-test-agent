@@ -115,11 +115,25 @@ def _uncovered_branches(sourcefile_node: ET.Element) -> list[str]:
     return descriptions
 
 
+def _find_method_node(
+    class_node: ET.Element, method_name: str,
+) -> ET.Element | None:
+    """Locate the ``<method>`` element for *method_name* inside *class_node*."""
+    for method in class_node.findall("method"):
+        if method.get("name") == method_name:
+            return method
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
-def parse_jacoco_xml(xml_path: Path, class_name: str) -> CoverageReport | None:
+def parse_jacoco_xml(
+    xml_path: Path,
+    class_name: str,
+    method_name: str | None = None,
+) -> CoverageReport | None:
     """Parse a JaCoCo XML report and return coverage for *class_name*.
 
     Parameters
@@ -128,12 +142,16 @@ def parse_jacoco_xml(xml_path: Path, class_name: str) -> CoverageReport | None:
         Path to ``jacoco.xml`` produced by JaCoCo.
     class_name:
         Fully-qualified class name, e.g. ``"com.example.Calculator"``.
+    method_name:
+        Optional method name.  When provided, LINE and BRANCH counters are
+        read from the ``<method>`` element instead of the class-level
+        aggregate, giving per-method coverage rather than whole-class coverage.
 
     Returns
     -------
     CoverageReport
-        Coverage data for the target class, or ``None`` if the class is not
-        found in the report or the file cannot be parsed.
+        Coverage data for the target class (or method), or ``None`` if the
+        class is not found in the report or the file cannot be parsed.
     """
     if not xml_path.is_file():
         logger.warning("JaCoCo XML not found: %s", xml_path)
@@ -153,9 +171,20 @@ def parse_jacoco_xml(xml_path: Path, class_name: str) -> CoverageReport | None:
         )
         return None
 
-    # Class-level counters (aggregate over all methods)
-    line_missed, line_covered = _counter_values(class_node, _LINE)
-    branch_missed, branch_covered = _counter_values(class_node, _BRANCH)
+    # Prefer method-level counters when a specific method is requested.
+    counter_node = class_node
+    if method_name:
+        method_node = _find_method_node(class_node, method_name)
+        if method_node is not None:
+            counter_node = method_node
+        else:
+            logger.warning(
+                "Method '%s' not found in class '%s'; falling back to class-level counters.",
+                method_name, class_name,
+            )
+
+    line_missed, line_covered = _counter_values(counter_node, _LINE)
+    branch_missed, branch_covered = _counter_values(counter_node, _BRANCH)
 
     line_coverage = _coverage_ratio(line_missed, line_covered)
     branch_coverage = _coverage_ratio(branch_missed, branch_covered)
@@ -176,8 +205,12 @@ def parse_jacoco_xml(xml_path: Path, class_name: str) -> CoverageReport | None:
     )
 
 
-def find_jacoco_xml(report_dir: Path) -> Path | None:
-    """Search *report_dir* for jacoco.xml and return its path, or ``None``."""
+def find_jacoco_xml(report_dir: Path, project_path: Path | None = None) -> Path | None:
+    """Search *report_dir* for jacoco.xml and return its path, or ``None``.
+
+    If the XML is not found in *report_dir*, falls back to the Maven/Gradle
+    default locations under *project_path*/target/ (if provided).
+    """
     candidates = [
         report_dir / "jacoco.xml",
         report_dir / "jacoco" / "jacoco.xml",
@@ -185,6 +218,17 @@ def find_jacoco_xml(report_dir: Path) -> Path | None:
     for c in candidates:
         if c.is_file():
             return c
-    # Recursive search as last resort
+    # Recursive search in report_dir
     found = list(report_dir.rglob("jacoco.xml"))
-    return found[0] if found else None
+    if found:
+        return found[0]
+    # Fallback: Maven/Gradle default output locations
+    if project_path is not None:
+        fallbacks = [
+            project_path / "target" / "site" / "jacoco" / "jacoco.xml",
+            project_path / "build" / "reports" / "jacoco" / "test" / "jacocoTestReport.xml",
+        ]
+        for fb in fallbacks:
+            if fb.is_file():
+                return fb
+    return None

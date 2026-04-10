@@ -157,6 +157,18 @@ def _print_code_preview(code: str, max_lines: int = 20) -> None:
         print(f"  | ... ({len(lines) - max_lines} more lines)")
 
 
+def _coverage_met(result: TestResult, min_branch_coverage: float) -> bool:
+    """Return True if branch coverage meets or exceeds *min_branch_coverage*.
+
+    Tests without coverage data (e.g. compile failure, missing JaCoCo XML)
+    are treated as *not* blocking the loop — we fall back to whatever the
+    ``passed`` flag indicates.
+    """
+    if result.coverage is None:
+        return True
+    return result.coverage.branch_coverage >= min_branch_coverage
+
+
 # ---------------------------------------------------------------------------
 # Core repair loop
 # ---------------------------------------------------------------------------
@@ -168,6 +180,7 @@ def repair_one(
     generator: TestGenerator,
     executor: TestExecutor,
     max_iterations: int,
+    min_branch_coverage: float,
 ) -> bool:
     """Repair a single failing test file.
 
@@ -223,11 +236,19 @@ def repair_one(
         print(f"  Execution finished in {time.time() - t0:.1f}s")
         _print_test_result(result, iteration)
 
-        if result.passed:
+        if result.passed and _coverage_met(result, min_branch_coverage):
             print(f"\n  [SUCCESS] Tests passed on iteration {iteration}.")
             out_path = _output_path(project_name, class_name, method_name)
             _save_repaired_test(out_path, test.test_code)
             break
+
+        if result.passed:
+            cov = result.coverage
+            print(
+                f"\n  Tests passed but branch coverage "
+                f"{cov.branch_coverage * 100:.1f}% < "
+                f"{min_branch_coverage * 100:.1f}%, refining for coverage..."
+            )
 
         if iteration - start_iteration + 1 < max_iterations:
             print(f"\n  Refining test (iteration {iteration} → {iteration + 1})...")
@@ -241,7 +262,10 @@ def repair_one(
             _print_code_preview(test.test_code)
             iteration = test.iteration
         else:
-            print(f"\n  [GIVE UP] Reached max iterations ({max_iterations}) without passing.")
+            print(f"\n  [GIVE UP] Reached max iterations ({max_iterations}).")
+            if result.passed:
+                out_path = _output_path(project_name, class_name, method_name)
+                _save_repaired_test(out_path, test.test_code)
             break
 
     return result is not None and result.passed
@@ -305,6 +329,12 @@ def parse_args() -> argparse.Namespace:
         default=REPORTS_ROOT,
         help=f"Directory for JaCoCo reports (default: {REPORTS_ROOT})",
     )
+    p.add_argument(
+        "--min-branch-coverage",
+        type=float,
+        default=None,
+        help="Minimum branch coverage (0.0–1.0) to stop iterating (default: from config)",
+    )
     return p.parse_args()
 
 
@@ -347,6 +377,7 @@ def main() -> None:
         "model": args.model,
         "max_iterations": args.max_iterations,
         "keep_test": args.keep_test,
+        "min_branch_coverage": args.min_branch_coverage,
     }.items() if v is not None}
     config = load_config(**overrides)
 
@@ -367,6 +398,7 @@ def main() -> None:
     print(f"  Model:           {config.model}")
     print(f"  Max iter:        {config.max_iterations}")
     print(f"  Keep test:       {config.keep_test}")
+    print(f"  Min branch cov:  {config.min_branch_coverage * 100:.0f}%")
     print(f"  Reports dir:     {args.reports_dir}")
     print(f"  Files:           {len(files)}")
 
@@ -387,7 +419,15 @@ def main() -> None:
     # --- Run ---
     results: list[tuple[str, bool]] = []
     for f in files:
-        ok = repair_one(f, project_name, analyzer, generator, executor, max_iterations=config.max_iterations)
+        ok = repair_one(
+            f,
+            project_name,
+            analyzer,
+            generator,
+            executor,
+            max_iterations=config.max_iterations,
+            min_branch_coverage=config.min_branch_coverage,
+        )
         results.append((f.name, ok))
 
     # --- Summary ---

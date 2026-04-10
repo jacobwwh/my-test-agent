@@ -46,10 +46,5 @@ public class CalculatorTest {
         assertEquals(-4, calculator.divide(-8, 2));
     }
 
-    // 缺失：未测试 b == 0 时抛出 ArithmeticException 的分支
-    // 应补充：
-    // @Test
-    // void testDivide_byZero_throwsArithmeticException() {
-    //     assertThrows(ArithmeticException.class, () -> calculator.divide(10, 0));
-    // }
+
 }

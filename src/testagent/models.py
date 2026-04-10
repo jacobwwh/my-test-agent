@@ -89,3 +89,4 @@ class Config:
     timeout: int = 120
     keep_test: bool = False
     jacoco_enabled: bool = True
+    min_branch_coverage: float = 1.0  # 0.0–1.0; iterate until met or max_iterations

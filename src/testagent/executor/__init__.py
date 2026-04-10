@@ -8,6 +8,7 @@ from pathlib import Path
 from testagent.executor.builder import (
     build_gradle_command,
     build_maven_command,
+    cleanup_generated_tests,
     detect_build_tool,
     extract_class_name_from_code,
     extract_package_from_code,
@@ -124,6 +125,12 @@ class TestExecutor:
                 self.project_path, test_class, package, report_dir,
             )
 
+        # --- Clean stale coverage data ---
+        stale_exec = self.project_path / "target" / "jacoco.exec"
+        if stale_exec.is_file():
+            stale_exec.unlink()
+            logger.info("Removed stale %s", stale_exec)
+
         # --- Run build ---
         try:
             returncode, output = run_build(
@@ -145,9 +152,9 @@ class TestExecutor:
         # --- Coverage ---
         coverage = None
         if parsed["compiled"]:
-            xml_path = find_jacoco_xml(report_dir)
+            xml_path = find_jacoco_xml(report_dir, self.project_path)
             if xml_path:
-                coverage = parse_jacoco_xml(xml_path, class_name)
+                coverage = parse_jacoco_xml(xml_path, class_name, method_name)
             else:
                 logger.warning(
                     "No JaCoCo XML found in %s; coverage will be unavailable.",
