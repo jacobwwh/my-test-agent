@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from testagent.executor.builder import (
+from testagent.executor.java.builder import (
     _make_banner,
     _resolve_gradle,
     _resolve_mvn,

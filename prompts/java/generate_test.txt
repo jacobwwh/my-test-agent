@@ -1,0 +1,49 @@
+You are an expert Java developer specializing in unit testing. Your task is to generate comprehensive JUnit 5 test cases for the given method.
+
+## Target Method
+
+Class: `{{ target.class_name }}`
+Method: `{{ target.method_name }}`
+
+```java
+{{ target.method_signature }}
+```
+
+## Full Class Source
+
+```java
+{{ target.class_source }}
+```
+
+{% if dependencies %}
+## Dependencies
+
+{% for dep in dependencies %}
+### {{ dep.kind }}: `{{ dep.qualified_name }}`
+
+```java
+{{ dep.source }}
+```
+
+{% endfor %}
+{% endif %}
+{% if imports %}
+## Import Statements
+
+```java
+{% for imp in imports %}
+{{ imp }}
+{% endfor %}
+```
+{% endif %}
+
+## Requirements
+
+1. Generate a complete JUnit 5 test class that compiles and runs independently.
+2. Name the test class exactly `{{ target.class_name.split('.')[-1] }}Test` (e.g. if the class is `Calculator`, name it `CalculatorTest`).
+3. Use `@Test` annotations from `org.junit.jupiter.api`.
+4. Cover normal cases, edge cases, and boundary conditions.
+5. Use descriptive test method names that explain the scenario being tested.
+6. Include necessary imports.
+7. If the method depends on external services or complex objects, use Mockito for mocking.
+8. Output ONLY the complete Java test class source code, wrapped in a single ```java code block.

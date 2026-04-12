@@ -20,7 +20,7 @@ import sys
 import time
 from pathlib import Path
 
-from testagent.analyzer import JavaAnalyzer
+from testagent.analyzer import create_analyzer
 from testagent.cli_utils import resolve_project_path, resolve_targets
 from testagent.config import load_config
 from testagent.generator.test_generator import TestGenerator
@@ -158,7 +158,7 @@ def _save_test(path: Path, test_code: str) -> None:
 
 
 def run_one(
-    analyzer: JavaAnalyzer,
+    analyzer,
     generator: TestGenerator,
     project_name: str,
     class_name: str,
@@ -277,6 +277,11 @@ def parse_args() -> argparse.Namespace:
         help="Method name to analyze together with --class",
     )
     p.add_argument("--model", help="Override LLM model name")
+    p.add_argument(
+        "--language",
+        default=None,
+        help="Target language (default: java)",
+    )
     return p.parse_args()
 
 
@@ -308,11 +313,11 @@ def main() -> None:
         return
 
     # --- Config ---
-    overrides = {}
-    if args.model:
-        overrides["model"] = args.model
-    if args.project is not None:
-        overrides["project_path"] = str(args.project)
+    overrides = {k: v for k, v in {
+        "model": args.model,
+        "project_path": str(args.project) if args.project is not None else None,
+        "language": args.language,
+    }.items() if v is not None}
     config = load_config(**overrides)
     project_path = resolve_project_path(args.project, config.project_path, SAMPLE_PROJECT)
     project_name = project_path.name
@@ -336,17 +341,19 @@ def main() -> None:
         sys.exit(1)
 
     print(f"Project:   {project_path}")
+    print(f"Language:  {config.language}")
     print(f"API:       {config.api_base_url}")
     print(f"Model:     {config.model}")
     print(f"Output:    {OUTPUT_ROOT / project_name}")
 
     # --- Run ---
-    analyzer = JavaAnalyzer(project_path)
+    analyzer = create_analyzer(config.language, project_path)
     generator = TestGenerator(
         api_base_url=config.api_base_url,
         api_key=config.api_key,
         model=config.model,
         timeout=config.timeout,
+        language=config.language,
     )
 
     results: list[tuple[str, bool]] = []

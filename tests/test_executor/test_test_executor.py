@@ -106,7 +106,7 @@ class TestTestExecutorInit:
 # ---------------------------------------------------------------------------
 
 class TestExecuteSuccess:
-    @patch("testagent.executor.run_build", return_value=(0, MAVEN_SUCCESS_OUTPUT))
+    @patch("testagent.executor.java.run_build", return_value=(0, MAVEN_SUCCESS_OUTPUT))
     def test_returns_test_result(self, mock_run, maven_project, tmp_path):
         executor = TestExecutor(maven_project, reports_dir=tmp_path / "r")
         result = executor.execute(_make_test(), _make_context())
@@ -114,7 +114,7 @@ class TestExecuteSuccess:
         assert result.passed is True
         assert result.failed_tests == []
 
-    @patch("testagent.executor.run_build", return_value=(0, MAVEN_SUCCESS_OUTPUT))
+    @patch("testagent.executor.java.run_build", return_value=(0, MAVEN_SUCCESS_OUTPUT))
     def test_test_file_removed_after_execution(self, mock_run, maven_project, tmp_path):
         executor = TestExecutor(maven_project, reports_dir=tmp_path / "r", keep_test=False)
         executor.execute(_make_test(), _make_context())
@@ -123,21 +123,21 @@ class TestExecuteSuccess:
         leftover = list(test_dir.glob("*.java")) if test_dir.exists() else []
         assert leftover == []
 
-    @patch("testagent.executor.run_build", return_value=(0, MAVEN_SUCCESS_OUTPUT))
+    @patch("testagent.executor.java.run_build", return_value=(0, MAVEN_SUCCESS_OUTPUT))
     def test_test_file_kept_when_keep_test_true(self, mock_run, maven_project, tmp_path):
         executor = TestExecutor(maven_project, reports_dir=tmp_path / "r", keep_test=True)
         executor.execute(_make_test(), _make_context())
         test_dir = maven_project / "src" / "test" / "java" / "com" / "example"
         assert (test_dir / "CalculatorTest.java").is_file()
 
-    @patch("testagent.executor.run_build", return_value=(0, MAVEN_SUCCESS_OUTPUT))
+    @patch("testagent.executor.java.run_build", return_value=(0, MAVEN_SUCCESS_OUTPUT))
     def test_coverage_none_when_no_xml(self, mock_run, maven_project, tmp_path):
         executor = TestExecutor(maven_project, reports_dir=tmp_path / "r")
         result = executor.execute(_make_test(), _make_context())
         # No jacoco.xml was created, so coverage should be None.
         assert result.coverage is None
 
-    @patch("testagent.executor.run_build", return_value=(0, MAVEN_SUCCESS_OUTPUT))
+    @patch("testagent.executor.java.run_build", return_value=(0, MAVEN_SUCCESS_OUTPUT))
     def test_coverage_populated_when_xml_present(self, mock_run, maven_project, tmp_path):
         reports_dir = tmp_path / "reports"
         # Pre-create the jacoco.xml in the expected location.
@@ -171,7 +171,7 @@ class TestExecuteSuccess:
 # ---------------------------------------------------------------------------
 
 class TestExecuteFailures:
-    @patch("testagent.executor.run_build", return_value=(1, MAVEN_COMPILE_ERROR_OUTPUT))
+    @patch("testagent.executor.java.run_build", return_value=(1, MAVEN_COMPILE_ERROR_OUTPUT))
     def test_compile_error(self, mock_run, maven_project, tmp_path):
         executor = TestExecutor(maven_project, reports_dir=tmp_path / "r")
         result = executor.execute(_make_test(), _make_context())
@@ -179,7 +179,7 @@ class TestExecuteFailures:
         assert result.passed is False
         assert len(result.compile_errors) > 0
 
-    @patch("testagent.executor.run_build", return_value=(1, MAVEN_TEST_FAILURE_OUTPUT))
+    @patch("testagent.executor.java.run_build", return_value=(1, MAVEN_TEST_FAILURE_OUTPUT))
     def test_test_failure(self, mock_run, maven_project, tmp_path):
         executor = TestExecutor(maven_project, reports_dir=tmp_path / "r")
         result = executor.execute(_make_test(), _make_context())
@@ -187,14 +187,14 @@ class TestExecuteFailures:
         assert result.passed is False
         assert "testAdd" in result.failed_tests
 
-    @patch("testagent.executor.run_build", side_effect=Exception("timeout"))
+    @patch("testagent.executor.java.run_build", side_effect=Exception("timeout"))
     def test_build_process_exception(self, mock_run, maven_project, tmp_path):
         executor = TestExecutor(maven_project, reports_dir=tmp_path / "r")
         result = executor.execute(_make_test(), _make_context())
         assert result.compiled is False
         assert "timeout" in result.compile_errors
 
-    @patch("testagent.executor.run_build", side_effect=Exception("timeout"))
+    @patch("testagent.executor.java.run_build", side_effect=Exception("timeout"))
     def test_test_file_removed_when_build_process_exception(self, mock_run, maven_project, tmp_path):
         executor = TestExecutor(maven_project, reports_dir=tmp_path / "r", keep_test=False)
         executor.execute(_make_test(), _make_context())
@@ -216,7 +216,7 @@ class TestExecuteFailures:
 # ---------------------------------------------------------------------------
 
 class TestReportDirStructure:
-    @patch("testagent.executor.run_build", return_value=(0, MAVEN_SUCCESS_OUTPUT))
+    @patch("testagent.executor.java.run_build", return_value=(0, MAVEN_SUCCESS_OUTPUT))
     def test_report_dir_keyed_by_class_method_iter(self, mock_run, maven_project, tmp_path):
         reports_dir = tmp_path / "reports"
         executor = TestExecutor(maven_project, reports_dir=reports_dir)
@@ -229,7 +229,7 @@ class TestReportDirStructure:
         )
         assert expected.is_dir()
 
-    @patch("testagent.executor.run_build", return_value=(0, MAVEN_SUCCESS_OUTPUT))
+    @patch("testagent.executor.java.run_build", return_value=(0, MAVEN_SUCCESS_OUTPUT))
     def test_different_iterations_get_separate_dirs(self, mock_run, maven_project, tmp_path):
         reports_dir = tmp_path / "reports"
         executor = TestExecutor(maven_project, reports_dir=reports_dir)
@@ -245,14 +245,14 @@ class TestReportDirStructure:
 # ---------------------------------------------------------------------------
 
 class TestExecuteGradle:
-    @patch("testagent.executor.run_build", return_value=(0, "3 tests completed, 0 failed\nBUILD SUCCESSFUL"))
+    @patch("testagent.executor.java.run_build", return_value=(0, "3 tests completed, 0 failed\nBUILD SUCCESSFUL"))
     def test_gradle_success(self, mock_run, gradle_project, tmp_path):
         executor = TestExecutor(gradle_project, reports_dir=tmp_path / "r")
         result = executor.execute(_make_test(), _make_context())
         assert result.compiled is True
         assert result.passed is True
 
-    @patch("testagent.executor.run_build", return_value=(0, "3 tests completed, 0 failed\nBUILD SUCCESSFUL"))
+    @patch("testagent.executor.java.run_build", return_value=(0, "3 tests completed, 0 failed\nBUILD SUCCESSFUL"))
     def test_gradle_command_passed_to_run_build(self, mock_run, gradle_project, tmp_path):
         executor = TestExecutor(gradle_project, reports_dir=tmp_path / "r")
         executor.execute(_make_test(), _make_context())

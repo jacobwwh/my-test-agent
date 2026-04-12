@@ -21,10 +21,10 @@ import sys
 import time
 from pathlib import Path
 
-from testagent.analyzer import JavaAnalyzer
+from testagent.analyzer import create_analyzer
 from testagent.cli_utils import resolve_project_path, resolve_targets
 from testagent.config import load_config
-from testagent.executor import TestExecutor
+from testagent.executor import create_executor
 from testagent.generator.test_generator import TestGenerator
 from testagent.models import AnalysisContext, GeneratedTest, TestResult
 
@@ -245,9 +245,9 @@ def _coverage_met(result: TestResult, min_branch_coverage: float) -> bool:
 def run_one(
     class_name: str,
     method_name: str,
-    analyzer: JavaAnalyzer,
+    analyzer,
     generator: TestGenerator,
-    executor: TestExecutor,
+    executor,
     max_iterations: int,
     min_branch_coverage: float,
 ) -> bool:
@@ -425,6 +425,11 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Minimum branch coverage (0.0–1.0) to stop iterating (default: from config)",
     )
+    p.add_argument(
+        "--language",
+        default=None,
+        help="Target language (default: java)",
+    )
     return p.parse_args()
 
 
@@ -462,6 +467,7 @@ def main() -> None:
         "max_iterations": args.max_iterations,
         "keep_test": args.keep_test,
         "min_branch_coverage": args.min_branch_coverage,
+        "language": args.language,
     }.items() if v is not None}
     config = load_config(**overrides)
     project_path = resolve_project_path(args.project, config.project_path, SAMPLE_PROJECT)
@@ -488,6 +494,7 @@ def main() -> None:
     print("  Pipeline: Analyzer → Generator → Executor")
     print(_sep())
     print(f"  Project:       {project_path}")
+    print(f"  Language:      {config.language}")
     print(f"  API:           {config.api_base_url}")
     print(f"  Model:         {config.model}")
     print(f"  Max iter:      {config.max_iterations}")
@@ -497,15 +504,17 @@ def main() -> None:
     print(f"  Targets:       {len(targets)}")
 
     # ── Build modules ───────────────────────────────────────────────
-    analyzer = JavaAnalyzer(project_path)
+    analyzer = create_analyzer(config.language, project_path)
     generator = TestGenerator(
         api_base_url=config.api_base_url,
         api_key=config.api_key,
         model=config.model,
         timeout=config.timeout,
+        language=config.language,
     )
-    executor = TestExecutor(
-        project_path=project_path,
+    executor = create_executor(
+        config.language,
+        project_path,
         reports_dir=args.reports_dir,
         keep_test=config.keep_test,
     )

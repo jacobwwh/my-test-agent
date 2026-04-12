@@ -1,0 +1,5 @@
+{# C++ test generation prompt — placeholder stub #}
+[C++ support is not yet implemented. This template is a placeholder.]
+
+Target method: {{ target.class_name }}::{{ target.method_name }}
+Signature: {{ target.method_signature }}

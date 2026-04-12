@@ -86,6 +86,7 @@ class Config:
     api_key: str = ""  # Defaults to YUNWU_API_KEY env var via config loader
     model: str = "qwen3.5-397b-a17b"
     project_path: str | None = None
+    language: str = "java"  # Target language: java, cpp, …
     max_iterations: int = 5
     timeout: int = 120
     keep_test: bool = False

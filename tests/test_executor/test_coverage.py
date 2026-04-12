@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from testagent.executor.coverage import (
+from testagent.executor.java.coverage import (
     _branch_coverage_ratio,
     _class_xml_name,
     _coverage_ratio,

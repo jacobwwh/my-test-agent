@@ -1,6 +1,6 @@
 # my-test-agent
 
-基于本地部署 LLM (使用openai API调用)的 Java 单元测试自动生成框架。通过分析被测类源码，调用大模型生成 JUnit 5 测试用例，再经由 Maven/Gradle 编译执行并收集 JaCoCo 覆盖率，最后根据编译错误、测试失败和覆盖率缺口进行迭代优化，直到测试通过且覆盖率达标。
+基于本地部署 LLM（使用 OpenAI API 调用）的多语言单元测试自动生成框架。当前支持 Java（通过分析源码生成 JUnit 5 测试用例，经 Maven/Gradle 编译执行并收集 JaCoCo 覆盖率，根据编译错误、测试失败和覆盖率缺口迭代优化），并通过 `--language` 参数预留了对 C++ 等其他语言的扩展接口。
 
 ## 配置
 
@@ -16,7 +16,8 @@ llm:
   timeout: 120                           # LLM 请求超时（秒）
 
 project:
-  path: ""                               # 被测 Java 项目根目录；留空则使用内置 sample 项目
+  path: ""                               # 被测项目根目录；留空则使用内置 sample 项目
+  language: "java"                       # 目标语言：java（后续支持 cpp 等）
 
 pipeline:
   max_iterations: 5                      # 最大迭代优化次数
@@ -35,7 +36,7 @@ export YUNWU_API_KEY="your-api-key"
 
 环境变量 `YUNWU_API_KEY` 优先于配置文件中的 `llm.api_key`。
 
-### 设置被测项目根目录
+### 设置被测项目根目录和语言
 
 项目根目录优先级如下：
 
@@ -43,11 +44,18 @@ export YUNWU_API_KEY="your-api-key"
 2. 配置文件 `project.path`
 3. 默认示例项目 `under_test/sample-java-project`
 
+语言优先级如下：
+
+1. CLI 参数 `--language`
+2. 配置文件 `project.language`
+3. 默认值 `java`
+
 示例：
 
 ```yaml
 project:
   path: "/path/to/java-project"
+  language: "java"
 ```
 
 ### CLI 参数覆盖
@@ -59,11 +67,12 @@ project:
 | `--target` | 使用预设目标，例如 `Calculator.add` |
 | `--class` | 指定任意目标的全限定类名，例如 `com.example.Calculator` |
 | `--method` | 与 `--class` 搭配，指定目标方法名 |
+| `--language` | 目标语言（默认 `java`，后续支持 `cpp` 等） |
 | `--model` | 覆盖 LLM 模型名称 |
 | `--max-iterations` | 覆盖最大迭代次数 |
 | `--keep-test` | 执行后保留测试文件 |
 | `--min-branch-coverage` | 覆盖目标分支覆盖率（0.0–1.0） |
-| `--project` | 指定被测 Java 项目路径 |
+| `--project` | 指定被测项目路径 |
 | `--reports-dir` | 指定 JaCoCo 报告输出目录 |
 
 ## 脚本说明与使用
@@ -85,7 +94,7 @@ python test_analyzer.py -k "parse"
 
 ### test_generator.py — 分析 + 生成集成测试
 
-执行 **Analyzer -> Generator** 流程：分析被测类源码，调用 LLM 生成 JUnit 5 测试用例，将结果保存到 `generated_tests/<project-name>/`。不执行测试、不收集覆盖率。需要配置 API Key。
+执行 **Analyzer -> Generator** 流程：分析被测类源码，调用 LLM 生成测试用例，将结果保存到 `generated_tests/<project-name>/`。不执行测试、不收集覆盖率。需要配置 API Key。
 
 ```bash
 # 列出可用目标
@@ -102,6 +111,9 @@ python test_generator.py --project /path/to/java-project --class com.acme.OrderS
 
 # 使用指定模型
 python test_generator.py --target Calculator.divide --model gpt-4o
+
+# 指定目标语言（当前仅支持 java）
+python test_generator.py --language java --target Calculator.add
 ```
 
 ### test_executor.py — 完整流水线（生成 + 执行 + 迭代优化）
@@ -126,6 +138,9 @@ python test_executor.py --project /path/to/java-project --reports-dir /tmp/repor
 
 # 执行任意项目中的指定类方法
 python test_executor.py --project /path/to/java-project --class com.acme.OrderService --method submit
+
+# 指定目标语言
+python test_executor.py --language java --target Calculator.add
 ```
 
 ### test_repair.py — 修复已有失败测试
@@ -147,6 +162,9 @@ python test_repair.py --file CalculatorTest_failing.java --max-iterations 3 --ke
 
 # 使用配置文件之外的被测项目根目录
 python test_repair.py --project /path/to/java-project --file CalculatorTest_failing.java
+
+# 指定目标语言
+python test_repair.py --language java --file CalculatorTest_failing.java
 ```
 
 ## 预设测试目标

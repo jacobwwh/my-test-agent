@@ -2,7 +2,7 @@
 
 import pytest
 
-from testagent.executor.runner import (
+from testagent.executor.java.runner import (
     parse_build_result,
     parse_gradle_result,
     parse_maven_result,

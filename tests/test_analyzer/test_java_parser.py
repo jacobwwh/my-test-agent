@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from testagent.analyzer.java_parser import (
+from testagent.analyzer.java.java_parser import (
     all_referenced_types,
     extract_imports,
     extract_package,

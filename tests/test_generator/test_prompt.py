@@ -51,8 +51,8 @@ def sample_context(sample_target: TargetMethod) -> AnalysisContext:
 
 @pytest.fixture
 def prompts_dir() -> Path:
-    """Point to the actual prompts directory."""
-    return Path(__file__).resolve().parent.parent.parent / "prompts"
+    """Point to the actual Java prompts directory."""
+    return Path(__file__).resolve().parent.parent.parent / "prompts" / "java"
 
 
 class TestBuildGeneratePrompt:

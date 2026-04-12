@@ -5,7 +5,8 @@ llm:
   timeout: 120  # seconds
 
 project:
-  path: ""  # Optional Java project root; falls back to under_test/sample-java-project
+  path: ""      # Optional project root; falls back to under_test/sample-java-project
+  language: "java"  # Target language: java, cpp, …
 
 pipeline:
   max_iterations: 5

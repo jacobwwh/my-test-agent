@@ -12,12 +12,14 @@
 | `prompt.py` | 加载并渲染 Jinja2 Prompt 模板 |
 | `test_generator.py` | 编排生成/修复流程，提取响应中的 Java 代码 |
 
-对应的 Prompt 模板位于项目根目录的 `prompts/` 下：
+对应的 Prompt 模板按语言存放在 `prompts/<language>/` 下：
 
 | 文件 | 用途 |
 |------|------|
-| `prompts/generate_test.txt` | 首次生成测试用例 |
-| `prompts/fix_test.txt` | 基于反馈迭代修复 |
+| `prompts/java/generate_test.txt` | Java：首次生成测试用例 |
+| `prompts/java/fix_test.txt` | Java：基于反馈迭代修复 |
+| `prompts/cpp/generate_test.txt` | C++：占位模板（未实现） |
+| `prompts/cpp/fix_test.txt` | C++：占位模板（未实现） |
 
 ---
 
@@ -27,8 +29,8 @@
 src/testagent/generator/
 ├── __init__.py          # 公开导出
 ├── llm_client.py        # LLM API 客户端
-├── prompt.py            # Prompt 构建
-└── test_generator.py    # 主入口：TestGenerator + extract_java_code
+├── prompt.py            # Prompt 构建（支持 language 参数）
+└── test_generator.py    # 主入口：TestGenerator + extract_code_block
 ```
 
 ---
@@ -49,19 +51,20 @@ src/testagent/generator/
 | `api_key` | `str` | 必填 | API 鉴权密钥 |
 | `model` | `str` | `"qwen3.5-397b-a17b"` | 模型名称 |
 | `timeout` | `int` | `120` | 请求超时时间（秒） |
+| `language` | `str` | `"java"` | 目标语言，用于选取对应的 Prompt 模板目录 |
 
 #### `generate(context: AnalysisContext) -> GeneratedTest`
 
 首次调用，根据分析上下文生成初始测试用例。
 
-- 使用 `prompts/generate_test.txt` 模板构建 Prompt
+- 使用 `prompts/<language>/generate_test.txt` 模板构建 Prompt
 - 返回 `GeneratedTest(test_code=..., iteration=1)`
 
 #### `refine(context, previous_test, test_result) -> GeneratedTest`
 
 迭代修复，将上一轮的测试代码和执行反馈一并发给 LLM。
 
-- 使用 `prompts/fix_test.txt` 模板构建 Prompt
+- 使用 `prompts/<language>/fix_test.txt` 模板构建 Prompt
 - 返回 `GeneratedTest(test_code=..., iteration=previous_test.iteration + 1)`
 
 **调用示例**：
@@ -73,6 +76,7 @@ generator = TestGenerator(
     api_base_url="https://yunwu.ai/v1",
     api_key="your-api-key",
     model="qwen3.5-397b-a17b",
+    language="java",   # 选择 prompts/java/ 下的模板
 )
 
 # 首次生成
@@ -85,20 +89,22 @@ refined = generator.refine(context, result, test_result)  # iteration=2
 
 ---
 
-### `extract_java_code(text: str) -> str`
+### `extract_code_block(text: str) -> str`
 
 **位置**：`testagent/generator/test_generator.py`
 
-从 LLM 的 Markdown 格式响应中提取 Java 代码块。优先级如下：
+从 LLM 的 Markdown 格式响应中提取代码块。优先级如下：
 
-1. 匹配 ` ```java ... ``` ` 围栏（最优先）
+1. 匹配带语言标记的围栏（如 ` ```java `、` ```cpp `）（最优先）
 2. 匹配通用 ` ``` ... ``` ` 围栏
 3. 如果没有任何代码围栏，直接返回原始文本（并打印 warning 日志）
 
-```python
-from testagent.generator.test_generator import extract_java_code
+`extract_java_code` 是该函数的向后兼容别名，行为相同。
 
-code = extract_java_code("Sure, here it is:\n```java\npublic class FooTest {}\n```")
+```python
+from testagent.generator.test_generator import extract_code_block
+
+code = extract_code_block("Sure, here it is:\n```java\npublic class FooTest {}\n```")
 # → "public class FooTest {}"
 ```
 
@@ -164,7 +170,7 @@ except LLMAPIError as e:
 
 两个函数均返回 `list[dict[str, str]]`，可直接传给 `LLMClient.chat()`。
 
-#### `build_generate_prompt(context, prompts_dir=None)`
+#### `build_generate_prompt(context, prompts_dir=None, language="java")`
 
 渲染 `generate_test.txt` 模板，注入以下变量：
 
@@ -174,7 +180,7 @@ except LLMAPIError as e:
 | `dependencies` | `context.dependencies`（`list[Dependency]`） |
 | `imports` | `context.imports`（`list[str]`） |
 
-#### `build_refine_prompt(context, previous_test, test_result, prompts_dir=None)`
+#### `build_refine_prompt(context, previous_test, test_result, prompts_dir=None, language="java")`
 
 渲染 `fix_test.txt` 模板，额外注入：
 
@@ -183,13 +189,13 @@ except LLMAPIError as e:
 | `previous_test` | `GeneratedTest`（上一轮生成的测试） |
 | `test_result` | `TestResult`（编译/运行/覆盖度结果） |
 
-`prompts_dir` 参数默认解析为项目根目录下的 `prompts/`，测试时可传入自定义路径。
+`prompts_dir` 为 `None` 时，模板目录自动解析为 `prompts/<language>/`。显式传入 `prompts_dir` 时忽略 `language` 参数。测试时可传入自定义路径。
 
 ---
 
 ## Prompt 模板说明
 
-### `prompts/generate_test.txt`
+### `prompts/java/generate_test.txt`
 
 初始生成模板，内容结构：
 
@@ -209,7 +215,7 @@ except LLMAPIError as e:
 - 如需 Mock，使用 Mockito
 - 只输出 Java 代码，用 ` ```java ` 围栏包裹
 
-### `prompts/fix_test.txt`
+### `prompts/java/fix_test.txt`
 
 迭代修复模板，在初始模板基础上新增：
 
@@ -231,13 +237,13 @@ except LLMAPIError as e:
 AnalysisContext
       │
       ▼
-build_generate_prompt()   ←── generate_test.txt (Jinja2)
+build_generate_prompt()   ←── prompts/<language>/generate_test.txt (Jinja2)
       │
       ▼
 LLMClient.chat()          ←── OpenAI-compatible API (yunwu / 生产端点)
       │
       ▼  (原始 Markdown 文本)
-extract_java_code()
+extract_code_block()
       │
       ▼
 GeneratedTest(test_code, iteration=1)
@@ -245,13 +251,13 @@ GeneratedTest(test_code, iteration=1)
   [执行后有反馈]
       │
       ▼
-build_refine_prompt()     ←── fix_test.txt (Jinja2)
+build_refine_prompt()     ←── prompts/<language>/fix_test.txt (Jinja2)
       │
       ▼
 LLMClient.chat()
       │
       ▼
-extract_java_code()
+extract_code_block()
       │
       ▼
 GeneratedTest(test_code, iteration=N+1)
@@ -271,6 +277,7 @@ GeneratedTest(test_code, iteration=N+1)
 | `api_key` | `""` | API 鉴权密钥，可通过 `YUNWU_API_KEY` 环境变量设置 |
 | `model` | `"qwen3.5-397b-a17b"` | 模型名称 |
 | `timeout` | `120` | 单次请求超时（秒） |
+| `language` | `"java"` | 目标语言，用于选取 `prompts/<language>/` 下的模板 |
 
 ### 配置优先级
 
@@ -360,7 +367,7 @@ config = load_config(
 
 | 测试文件 | 覆盖内容 |
 |----------|----------|
-| `test_extract_code.py` | `extract_java_code` 的 7 种输入场景 |
+| `test_extract_code.py` | `extract_code_block`（及 `extract_java_code` 别名）的 7 种输入场景 |
 | `test_prompt.py` | `build_generate_prompt` 和 `build_refine_prompt` 的内容正确性 |
 | `test_llm_client.py` | `LLMClient` 正常响应、空内容、连接错误、超时、API 错误、构造参数 |
 | `test_test_generator.py` | `generate`/`refine` 端到端、迭代计数、反馈注入 |

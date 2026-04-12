@@ -11,7 +11,8 @@ from testagent.models import AnalysisContext, GeneratedTest, TestResult
 
 __all__ = [
     "TestGenerator",
-    "extract_java_code",
+    "extract_code_block",
+    "extract_java_code",  # backward-compat alias
     "normalize_test_class_name",
     "canonical_test_class_name",
 ]
@@ -79,11 +80,11 @@ def normalize_test_class_name(test_code: str, class_name: str) -> str:
     return new_code
 
 
-def extract_java_code(text: str) -> str:
-    """从模型回复中提取 Java 代码块。
+def extract_code_block(text: str) -> str:
+    """从模型回复中提取代码块。
 
     功能简介：
-        优先提取 Markdown 中的 ```java fenced code block，
+        优先提取 Markdown 中带语言标记的 fenced code block（如 ```java），
         若不存在则回退到普通 ``` code block；再没有则返回去除首尾空白后的原始文本。
 
     输入参数：
@@ -92,14 +93,14 @@ def extract_java_code(text: str) -> str:
 
     返回值：
         str:
-            提取出的 Java 代码字符串。
+            提取出的代码字符串。
 
     使用示例：
-        >>> extract_java_code("```java\\nclass A {}\\n```")
+        >>> extract_code_block("```java\\nclass A {}\\n```")
         'class A {}'
     """
-    # Try ```java block first
-    match = re.search(r"```java\s*\n(.*?)```", text, re.DOTALL)
+    # Try fenced block with language tag first (e.g. ```java, ```cpp)
+    match = re.search(r"```\w+\s*\n(.*?)```", text, re.DOTALL)
     if match:
         return match.group(1).strip()
 
@@ -111,6 +112,10 @@ def extract_java_code(text: str) -> str:
     # No code fence found – return raw text
     logger.warning("No code fence found in LLM response, using raw text.")
     return text.strip()
+
+
+# Backward-compatibility alias
+extract_java_code = extract_code_block
 
 
 class TestGenerator:
@@ -131,6 +136,7 @@ class TestGenerator:
         api_key: str,
         model: str = "qwen3.5-397b-a17b",
         timeout: int = 120,
+        language: str = "java",
     ) -> None:
         """初始化测试生成器。
 
@@ -146,6 +152,8 @@ class TestGenerator:
                 默认调用的模型名称。
             timeout:
                 单次请求超时时间，单位为秒。
+            language:
+                目标语言标识符（如 ``java``），用于选取对应语言的 Prompt 模板。
 
         返回值：
             None:
@@ -160,6 +168,7 @@ class TestGenerator:
             model=model,
             timeout=timeout,
         )
+        self._language = language
 
     def generate(self, context: AnalysisContext) -> GeneratedTest:
         """生成目标方法的首版测试代码。
@@ -181,11 +190,11 @@ class TestGenerator:
             >>> result.iteration
             1
         """
-        messages = build_generate_prompt(context)
+        messages = build_generate_prompt(context, language=self._language)
         logger.info("Generating initial test for %s.%s",
                      context.target.class_name, context.target.method_name)
         raw_response = self._client.chat(messages)
-        test_code = extract_java_code(raw_response)
+        test_code = extract_code_block(raw_response)
         test_code = normalize_test_class_name(test_code, context.target.class_name)
         return GeneratedTest(test_code=test_code, iteration=1)
 
@@ -218,12 +227,12 @@ class TestGenerator:
             >>> refined.iteration == previous_test.iteration + 1
             True
         """
-        messages = build_refine_prompt(context, previous_test, test_result)
+        messages = build_refine_prompt(context, previous_test, test_result, language=self._language)
         logger.info("Refining test for %s.%s (iteration %d -> %d)",
                      context.target.class_name, context.target.method_name,
                      previous_test.iteration, previous_test.iteration + 1)
         raw_response = self._client.chat(messages)
-        test_code = extract_java_code(raw_response)
+        test_code = extract_code_block(raw_response)
         test_code = normalize_test_class_name(test_code, context.target.class_name)
         return GeneratedTest(
             test_code=test_code,

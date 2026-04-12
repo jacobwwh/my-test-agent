@@ -1,14 +1,16 @@
 # Analyzer 模块文档
 
-`testagent.analyzer` 模块负责对 Java 源码进行静态分析，提取目标方法及其项目内依赖的上下文信息，为后续 LLM 生成测试用例提供输入。
+`testagent.analyzer` 模块负责对源码进行静态分析，提取目标方法及其项目内依赖的上下文信息，为后续 LLM 生成测试用例提供输入。当前实现支持 Java；其他语言通过工厂函数扩展。
 
-模块由三部分组成：
+模块结构如下：
 
 | 文件 | 职责 |
 |------|------|
-| `analyzer/__init__.py` | 对外门面类 `JavaAnalyzer` |
-| `analyzer/java_parser.py` | 基于 tree-sitter 的 Java AST 解析 |
-| `analyzer/dependency.py` | 依赖类型解析与源码提取 |
+| `analyzer/__init__.py` | 工厂函数 `create_analyzer()` 及向后兼容的 `JavaAnalyzer` 导出 |
+| `analyzer/base.py` | 抽象基类 `BaseAnalyzer` |
+| `analyzer/java/__init__.py` | Java 实现：`JavaAnalyzer` |
+| `analyzer/java/java_parser.py` | 基于 tree-sitter 的 Java AST 解析 |
+| `analyzer/java/dependency.py` | 依赖类型解析与源码提取 |
 
 ---
 
@@ -16,9 +18,10 @@
 
 ```python
 from pathlib import Path
-from testagent.analyzer import JavaAnalyzer
+from testagent.analyzer import create_analyzer
 
-analyzer = JavaAnalyzer(Path("/path/to/java-project"))
+# 通过工厂函数创建（推荐）
+analyzer = create_analyzer("java", Path("/path/to/java-project"))
 ctx = analyzer.analyze("com.example.service.OrderService", "process")
 
 # 目标方法源码
@@ -34,9 +37,29 @@ for dep in ctx.dependencies:
 
 ---
 
-## 门面类：`JavaAnalyzer`
+## 工厂函数：`create_analyzer`
 
 **所在模块**：`testagent.analyzer`
+
+```python
+from testagent.analyzer import create_analyzer
+
+analyzer = create_analyzer("java", Path("/path/to/project"))
+```
+
+根据 `language` 参数从内部注册表中查找对应的分析器类并实例化。当前支持的语言：
+
+| `language` 值 | 对应实现 |
+|--------------|---------|
+| `"java"` | `JavaAnalyzer` |
+
+传入不支持的语言时抛出 `ValueError`。
+
+---
+
+## Java 实现：`JavaAnalyzer`
+
+**所在模块**：`testagent.analyzer.java`（也可通过 `testagent.analyzer.JavaAnalyzer` 向后兼容导入）
 
 ### `__init__(self, project_path: Path)`
 
@@ -65,7 +88,9 @@ for dep in ctx.dependencies:
 | `ValueError` | 文件中找不到指定的类名或方法名。方法未找到时，错误信息会列出该类中所有可用的方法名 |
 
 ```python
-analyzer = JavaAnalyzer(Path("my-project"))
+from testagent.analyzer import create_analyzer
+
+analyzer = create_analyzer("java", Path("my-project"))
 
 # 正常调用
 ctx = analyzer.analyze("com.example.Calculator", "add")
@@ -81,7 +106,7 @@ analyzer.analyze("com.example.Calculator", "bad")
 
 ## 底层 API：`java_parser` 模块
 
-**所在模块**：`testagent.analyzer.java_parser`
+**所在模块**：`testagent.analyzer.java.java_parser`
 
 以下函数可单独使用，适合需要对 Java 源码进行细粒度操作的场景。
 
@@ -92,7 +117,7 @@ analyzer.analyze("com.example.Calculator", "bad")
 按以下顺序搜索源码目录：`src/main/java` > `src/java` > `src`。
 
 ```python
-from testagent.analyzer.java_parser import find_java_file
+from testagent.analyzer.java.java_parser import find_java_file
 
 path = find_java_file(Path("my-project"), "com.example.model.Order")
 # -> Path("my-project/src/main/java/com/example/model/Order.java") 或 None
@@ -103,7 +128,7 @@ path = find_java_file(Path("my-project"), "com.example.model.Order")
 将 Java 源码字节串解析为 tree-sitter AST，返回根节点。
 
 ```python
-from testagent.analyzer.java_parser import parse_source
+from testagent.analyzer.java.java_parser import parse_source
 
 root = parse_source(b"package com.example; public class Foo { }")
 print(root.type)  # "program"
@@ -134,7 +159,7 @@ imports = extract_imports(root)
 在类节点中按名称查找方法声明节点。
 
 ```python
-from testagent.analyzer.java_parser import parse_source, _find_class_node, find_method_node
+from testagent.analyzer.java.java_parser import parse_source, _find_class_node, find_method_node
 
 root = parse_source(source_bytes)
 cls = _find_class_node(root, "Calculator")
@@ -154,7 +179,7 @@ names = list_method_names(cls)  # ["add", "divide"]
 从类声明和方法声明中提取所有引用的类型名称。
 
 ```python
-from testagent.analyzer.java_parser import extract_type_refs
+from testagent.analyzer.java.java_parser import extract_type_refs
 
 refs = extract_type_refs(cls, method)
 print(refs.superclass)    # "BaseService" 或 None
@@ -172,7 +197,7 @@ print(refs.body_types)    # ["IllegalArgumentException"]
 将 `TypeRefs` 中所有类型名称合并为去重集合。
 
 ```python
-from testagent.analyzer.java_parser import all_referenced_types
+from testagent.analyzer.java.java_parser import all_referenced_types
 
 types = all_referenced_types(refs)
 # {"Order", "OrderDao", "BaseService", "Processable", "IllegalArgumentException", "List"}
@@ -183,7 +208,7 @@ types = all_referenced_types(refs)
 高层封装：定位文件 -> 解析 AST -> 提取包/import/类源码/方法源码/类型引用，一步完成。
 
 ```python
-from testagent.analyzer.java_parser import parse_target
+from testagent.analyzer.java.java_parser import parse_target
 
 result = parse_target(Path("my-project"), "com.example.Calculator", "add")
 print(result.package)         # "com.example"
@@ -200,7 +225,7 @@ print(result.file_path)       # Path 对象
 
 ## 底层 API：`dependency` 模块
 
-**所在模块**：`testagent.analyzer.dependency`
+**所在模块**：`testagent.analyzer.java.dependency`
 
 ### `resolve_dependencies(project_path, type_names, imports, target_package) -> list[Dependency]`
 
@@ -223,7 +248,7 @@ print(result.file_path)       # Path 对象
 只有在项目中实际找到 `.java` 文件的类型才会被返回。
 
 ```python
-from testagent.analyzer.dependency import resolve_dependencies
+from testagent.analyzer.java.dependency import resolve_dependencies
 
 deps = resolve_dependencies(
     project_path=Path("my-project"),

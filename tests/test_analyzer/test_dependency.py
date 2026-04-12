@@ -4,13 +4,13 @@ from pathlib import Path
 
 import pytest
 
-from testagent.analyzer.dependency import (
+from testagent.analyzer.java.dependency import (
     _build_import_map,
     _detect_kind,
     resolve_dependencies,
     _BUILTIN_TYPES,
 )
-from testagent.analyzer.java_parser import parse_source
+from testagent.analyzer.java.java_parser import parse_source
 
 
 # ---------------------------------------------------------------------------

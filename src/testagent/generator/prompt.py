@@ -8,30 +8,35 @@ from jinja2 import Environment, FileSystemLoader
 
 from testagent.models import AnalysisContext, GeneratedTest, TestResult
 
-_PROMPTS_DIR = Path(__file__).resolve().parent.parent.parent.parent / "prompts"
+_PROMPTS_ROOT = Path(__file__).resolve().parent.parent.parent.parent / "prompts"
 
 
-def _get_env(prompts_dir: Path | None = None) -> Environment:
+def _get_env(prompts_dir: Path | None = None, language: str = "java") -> Environment:
     """创建 Prompt 模板渲染环境。
 
     功能简介：
         基于指定的 prompts 目录创建一个 Jinja2 `Environment`，
-        用于加载和渲染测试生成与修复模板。
+        用于加载和渲染测试生成与修复模板。当 `prompts_dir` 为 `None` 时，
+        自动使用 `_PROMPTS_ROOT / language` 作为模板目录。
 
     输入参数：
         prompts_dir:
-            Prompt 模板目录；为 `None` 时使用模块内置默认目录。
+            Prompt 模板目录；为 `None` 时根据 `language` 选择默认目录。
+        language:
+            目标语言标识符（如 ``java``），用于定位语言子目录。
+            仅在 `prompts_dir` 为 `None` 时生效。
 
     返回值：
         Environment:
             已配置 `FileSystemLoader` 的 Jinja2 渲染环境。
 
     使用示例：
-        >>> env = _get_env()
+        >>> env = _get_env(language="java")
         >>> env.get_template("generate_test.txt")
     """
+    resolved_dir = prompts_dir if prompts_dir is not None else _PROMPTS_ROOT / language
     return Environment(
-        loader=FileSystemLoader(str(prompts_dir or _PROMPTS_DIR)),
+        loader=FileSystemLoader(str(resolved_dir)),
         keep_trailing_newline=True,
     )
 
@@ -39,6 +44,7 @@ def _get_env(prompts_dir: Path | None = None) -> Environment:
 def build_generate_prompt(
     context: AnalysisContext,
     prompts_dir: Path | None = None,
+    language: str = "java",
 ) -> list[dict[str, str]]:
     """构造首次生成测试用例的聊天消息。
 
@@ -50,7 +56,10 @@ def build_generate_prompt(
         context:
             分析上下文，包含目标方法、依赖源码、imports 和 package 信息。
         prompts_dir:
-            自定义 Prompt 模板目录；为 `None` 时使用默认模板目录。
+            自定义 Prompt 模板目录；为 `None` 时根据 `language` 选择默认目录。
+        language:
+            目标语言标识符（如 ``java``），用于定位语言子目录。
+            仅在 `prompts_dir` 为 `None` 时生效。
 
     返回值：
         list[dict[str, str]]:
@@ -61,7 +70,7 @@ def build_generate_prompt(
         >>> messages[0]["role"]
         'user'
     """
-    env = _get_env(prompts_dir)
+    env = _get_env(prompts_dir, language)
     template = env.get_template("generate_test.txt")
     rendered = template.render(
         target=context.target,
@@ -76,6 +85,7 @@ def build_refine_prompt(
     previous_test: GeneratedTest,
     test_result: TestResult,
     prompts_dir: Path | None = None,
+    language: str = "java",
 ) -> list[dict[str, str]]:
     """构造测试修复/迭代优化的聊天消息。
 
@@ -91,7 +101,10 @@ def build_refine_prompt(
         test_result:
             上一轮执行结果，包含编译错误、失败测试和覆盖率信息。
         prompts_dir:
-            自定义 Prompt 模板目录；为 `None` 时使用默认模板目录。
+            自定义 Prompt 模板目录；为 `None` 时根据 `language` 选择默认目录。
+        language:
+            目标语言标识符（如 ``java``），用于定位语言子目录。
+            仅在 `prompts_dir` 为 `None` 时生效。
 
     返回值：
         list[dict[str, str]]:
@@ -102,7 +115,7 @@ def build_refine_prompt(
         >>> messages[0]["role"]
         'user'
     """
-    env = _get_env(prompts_dir)
+    env = _get_env(prompts_dir, language)
     template = env.get_template("fix_test.txt")
     rendered = template.render(
         target=context.target,

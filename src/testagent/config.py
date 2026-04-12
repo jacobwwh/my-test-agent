@@ -59,6 +59,8 @@ def load_config(
     project = raw.get("project", {})
     if "path" in project:
         flat["project_path"] = project["path"]
+    if "language" in project:
+        flat["language"] = project["language"]
 
     pipeline = raw.get("pipeline", {})
     if "max_iterations" in pipeline:

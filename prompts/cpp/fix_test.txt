@@ -1,0 +1,6 @@
+{# C++ test repair prompt — placeholder stub #}
+[C++ support is not yet implemented. This template is a placeholder.]
+
+Target method: {{ target.class_name }}::{{ target.method_name }}
+Previous test code:
+{{ previous_test.test_code }}

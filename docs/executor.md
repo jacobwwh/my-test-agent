@@ -2,16 +2,18 @@
 
 ## 概述
 
-测试执行模块（`testagent.executor`）负责将 Generator 生成的 JUnit 测试代码写入目标 Java 项目，通过 Maven 或 Gradle 编译并运行测试，解析构建输出，最后读取 JaCoCo 覆盖率报告——将这些结果封装为 `TestResult` 返回给上层的迭代精炼循环。
+测试执行模块（`testagent.executor`）负责将 Generator 生成的测试代码写入目标项目，通过构建工具编译并运行测试，解析构建输出，最后读取覆盖率报告——将这些结果封装为 `TestResult` 返回给上层的迭代精炼循环。当前实现支持 Java（Maven/Gradle + JaCoCo）；其他语言通过工厂函数扩展。
 
-模块由四个文件组成：
+模块结构如下：
 
 | 文件 | 职责 |
 |------|------|
-| `__init__.py` | 公开入口类 `TestExecutor`，编排完整执行流程 |
-| `builder.py` | 构建工具检测、测试文件写入、命令构造与执行 |
-| `runner.py` | 纯函数：解析 Maven / Gradle 构建输出 |
-| `coverage.py` | 解析 JaCoCo XML 报告，提取覆盖率数据 |
+| `executor/__init__.py` | 工厂函数 `create_executor()` 及向后兼容的 `TestExecutor` 导出 |
+| `executor/base.py` | 抽象基类 `BaseExecutor` |
+| `executor/java/__init__.py` | Java 实现：`JavaTestExecutor`（别名 `TestExecutor`） |
+| `executor/java/builder.py` | 构建工具检测、测试文件写入、命令构造与执行 |
+| `executor/java/runner.py` | 纯函数：解析 Maven / Gradle 构建输出 |
+| `executor/java/coverage.py` | 解析 JaCoCo XML 报告，提取覆盖率数据 |
 
 ---
 
@@ -19,21 +21,42 @@
 
 ```
 src/testagent/executor/
-├── __init__.py     # 公开入口：TestExecutor
-├── builder.py      # 构建工具检测、文件注入、命令执行
-├── runner.py       # 构建输出解析（纯函数）
-└── coverage.py     # JaCoCo XML 解析
+├── __init__.py          # 工厂函数 create_executor()，向后兼容导出 TestExecutor
+├── base.py              # 抽象基类 BaseExecutor
+└── java/
+    ├── __init__.py      # JavaTestExecutor（别名 TestExecutor）
+    ├── builder.py       # 构建工具检测、文件注入、命令执行
+    ├── runner.py        # 构建输出解析（纯函数）
+    └── coverage.py      # JaCoCo XML 解析
 ```
 
 ---
 
-## 核心类
-
-### `TestExecutor`
+## 工厂函数：`create_executor`
 
 **位置**：`testagent/executor/__init__.py`
 
-执行模块的主入口，将写文件、运行构建、解析结果、读取覆盖率、清理文件五个步骤串联为一次 `execute()` 调用。
+```python
+from testagent.executor import create_executor
+
+executor = create_executor("java", project_path, reports_dir=..., keep_test=False)
+```
+
+根据 `language` 参数从内部注册表中查找对应的执行器类并实例化。当前支持的语言：
+
+| `language` 值 | 对应实现 |
+|--------------|---------|
+| `"java"` | `JavaTestExecutor` |
+
+传入不支持的语言时抛出 `ValueError`。
+
+---
+
+## Java 实现：`JavaTestExecutor`
+
+**位置**：`testagent/executor/java/__init__.py`（也可通过 `testagent.executor.TestExecutor` 向后兼容导入）
+
+执行模块的 Java 主入口，将写文件、运行构建、解析结果、读取覆盖率、清理文件五个步骤串联为一次 `execute()` 调用。
 
 #### 构造参数
 
@@ -72,11 +95,12 @@ src/testagent/executor/
 
 ```python
 from pathlib import Path
-from testagent.executor import TestExecutor
+from testagent.executor import create_executor
 from testagent.models import GeneratedTest, AnalysisContext
 
-executor = TestExecutor(
-    project_path=Path("under_test/sample-java-project"),
+executor = create_executor(
+    "java",
+    Path("under_test/sample-java-project"),
     reports_dir=Path("tmp/reports"),
     keep_test=False,
 )
@@ -100,7 +124,7 @@ else:
 
 ## 子模块详解
 
-### `builder.py`
+### `java/builder.py`
 
 #### `detect_build_tool(project_path: Path) -> str`
 
@@ -179,7 +203,7 @@ Maven 优先于 Gradle 检测。
 
 ```python
 from pathlib import Path
-from testagent.executor import cleanup_generated_tests
+from testagent.executor.java.builder import cleanup_generated_tests
 
 # 仅清理带"大模型生成"标记的文件（默认行为）
 deleted = cleanup_generated_tests(Path("under_test/sample-java-project"))
@@ -243,7 +267,7 @@ gradle test jacocoTestReport \
 
 ---
 
-### `runner.py`
+### `java/runner.py`
 
 所有函数均为纯函数，不执行 I/O，仅接收字符串进行正则解析。
 
@@ -298,7 +322,7 @@ FAILED com.example.CalculatorTest > testDivideByZero
 
 ---
 
-### `coverage.py`
+### `java/coverage.py`
 
 #### `parse_jacoco_xml(xml_path: Path, class_name: str) -> CoverageReport | None`
 
