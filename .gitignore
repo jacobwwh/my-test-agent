@@ -1,4 +1,5 @@
 **/.DS_Store
+*.pyc
 tmp/
 generated_tests/
 under_test/sample-java-project/target/
