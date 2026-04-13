@@ -1,5 +1,7 @@
 **/.DS_Store
-*.pyc
+__pycache__/
+*.py[cod]
+*$py.class
 tmp/
 generated_tests/
 under_test/sample-java-project/target/

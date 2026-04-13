@@ -1,0 +1,20 @@
+name: Reject Python Bytecode
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  reject-bytecode:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fail if Python bytecode or cache directories are tracked
+        run: |
+          tracked_cache_files="$(git ls-files -- '*.pyc' '*.pyo' '*.pyd' ':(glob)**/__pycache__/**')"
+          if [ -n "$tracked_cache_files" ]; then
+            echo "Tracked Python bytecode/cache artifacts are not allowed:"
+            printf '%s\n' "$tracked_cache_files"
+            exit 1
+          fi
