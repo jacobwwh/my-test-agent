@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://maven.apache.org/surefire/maven-surefire-plugin/xsd/surefire-test-report-3.0.xsd" version="3.0" name="com.example.CalculatorTest" time="0.026" tests="10" errors="0" skipped="0" failures="0">
+<testsuite xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://maven.apache.org/surefire/maven-surefire-plugin/xsd/surefire-test-report-3.0.xsd" version="3.0" name="com.example.CalculatorTest" time="0.029" tests="8" errors="0" skipped="0" failures="0">
   <properties>
     <property name="socksProxyHost" value="127.0.0.1"/>
-    <property name="jacoco.dataFile" value="/Users/wangwh-local/Desktop/mycode/my-test-agent/tmp/reports/com_example_Calculator/divide/iter1/jacoco.exec"/>
+    <property name="jacoco.dataFile" value="/Users/wangwh-local/Desktop/mycode/my-test-agent/tmp/reports/com_example_Calculator/add/iter1/jacoco.exec"/>
     <property name="http.proxyHost" value="127.0.0.1"/>
     <property name="java.specification.version" value="25"/>
-    <property name="jacoco.outputDirectory" value="/Users/wangwh-local/Desktop/mycode/my-test-agent/tmp/reports/com_example_Calculator/divide/iter1"/>
+    <property name="jacoco.outputDirectory" value="/Users/wangwh-local/Desktop/mycode/my-test-agent/tmp/reports/com_example_Calculator/add/iter1"/>
     <property name="sun.jnu.encoding" value="UTF-8"/>
     <property name="java.class.path" value="/Users/wangwh-local/Desktop/mycode/my-test-agent/under_test/sample-java-project/target/test-classes:/Users/wangwh-local/Desktop/mycode/my-test-agent/under_test/sample-java-project/target/classes:/Users/wangwh-local/.m2/repository/org/junit/jupiter/junit-jupiter/5.10.2/junit-jupiter-5.10.2.jar:/Users/wangwh-local/.m2/repository/org/junit/jupiter/junit-jupiter-api/5.10.2/junit-jupiter-api-5.10.2.jar:/Users/wangwh-local/.m2/repository/org/opentest4j/opentest4j/1.3.0/opentest4j-1.3.0.jar:/Users/wangwh-local/.m2/repository/org/junit/platform/junit-platform-commons/1.10.2/junit-platform-commons-1.10.2.jar:/Users/wangwh-local/.m2/repository/org/apiguardian/apiguardian-api/1.1.2/apiguardian-api-1.1.2.jar:/Users/wangwh-local/.m2/repository/org/junit/jupiter/junit-jupiter-params/5.10.2/junit-jupiter-params-5.10.2.jar:/Users/wangwh-local/.m2/repository/org/junit/jupiter/junit-jupiter-engine/5.10.2/junit-jupiter-engine-5.10.2.jar:/Users/wangwh-local/.m2/repository/org/junit/platform/junit-platform-engine/1.10.2/junit-platform-engine-1.10.2.jar:/Users/wangwh-local/.m2/repository/org/mockito/mockito-core/5.11.0/mockito-core-5.11.0.jar:/Users/wangwh-local/.m2/repository/net/bytebuddy/byte-buddy/1.14.12/byte-buddy-1.14.12.jar:/Users/wangwh-local/.m2/repository/net/bytebuddy/byte-buddy-agent/1.14.12/byte-buddy-agent-1.14.12.jar:/Users/wangwh-local/.m2/repository/org/objenesis/objenesis/3.3/objenesis-3.3.jar:/Users/wangwh-local/.m2/repository/org/mockito/mockito-junit-jupiter/5.11.0/mockito-junit-jupiter-5.11.0.jar:"/>
-    <property name="jacoco.destFile" value="/Users/wangwh-local/Desktop/mycode/my-test-agent/tmp/reports/com_example_Calculator/divide/iter1/jacoco.exec"/>
+    <property name="jacoco.destFile" value="/Users/wangwh-local/Desktop/mycode/my-test-agent/tmp/reports/com_example_Calculator/add/iter1/jacoco.exec"/>
     <property name="https.proxyPort" value="7897"/>
     <property name="java.vm.vendor" value="Homebrew"/>
     <property name="sun.arch.data.model" value="64"/>
@@ -18,7 +18,7 @@
     <property name="sun.java.launcher" value="SUN_STANDARD"/>
     <property name="user.country" value="CN"/>
     <property name="sun.boot.library.path" value="/opt/homebrew/Cellar/openjdk/25.0.2/libexec/openjdk.jdk/Contents/Home/lib"/>
-    <property name="sun.java.command" value="/Users/wangwh-local/Desktop/mycode/my-test-agent/under_test/sample-java-project/target/surefire/surefirebooter-20260410111750664_3.jar /Users/wangwh-local/Desktop/mycode/my-test-agent/under_test/sample-java-project/target/surefire 2026-04-10T11-17-50_629-jvmRun1 surefire-20260410111750664_1tmp surefire_0-20260410111750664_2tmp"/>
+    <property name="sun.java.command" value="/Users/wangwh-local/Desktop/mycode/my-test-agent/under_test/sample-java-project/target/surefire/surefirebooter-20260413132326522_3.jar /Users/wangwh-local/Desktop/mycode/my-test-agent/under_test/sample-java-project/target/surefire 2026-04-13T13-23-26_488-jvmRun1 surefire-20260413132326522_1tmp surefire_0-20260413132326522_2tmp"/>
     <property name="http.nonProxyHosts" value="127.0.0.1|192.168.0.0/16|*.192.168.0.0/16|10.0.0.0/8|*.10.0.0.0/8|172.16.0.0/12|*.172.16.0.0/12|172.29.0.0/16|*.172.29.0.0/16|localhost|*.localhost|local|*.local|crashlytics.com|*.crashlytics.com|&lt;local&gt;|*.&lt;local&gt;|192.168.0.0/16|*.192.168.0.0/16|10.0.0.0/8|*.10.0.0.0/8|172.16.0.0/12|*.172.16.0.0/12|172.29.0.0/16|*.172.29.0.0/16|local|*.local|crashlytics.com|*.crashlytics.com|&lt;local&gt;|*.&lt;local&gt;"/>
     <property name="jdk.debug" value="release"/>
     <property name="test" value="com.example.CalculatorTest"/>
@@ -37,7 +37,7 @@
     <property name="java.vm.specification.vendor" value="Oracle Corporation"/>
     <property name="java.specification.name" value="Java Platform API Specification"/>
     <property name="apple.awt.application.name" value="ForkedBooter"/>
-    <property name="surefire.real.class.path" value="/Users/wangwh-local/Desktop/mycode/my-test-agent/under_test/sample-java-project/target/surefire/surefirebooter-20260410111750664_3.jar"/>
+    <property name="surefire.real.class.path" value="/Users/wangwh-local/Desktop/mycode/my-test-agent/under_test/sample-java-project/target/surefire/surefirebooter-20260413132326522_3.jar"/>
     <property name="user.script" value="Hans"/>
     <property name="sun.management.compiler" value="HotSpot 64-Bit Tiered Compilers"/>
     <property name="ftp.nonProxyHosts" value="127.0.0.1|192.168.0.0/16|*.192.168.0.0/16|10.0.0.0/8|*.10.0.0.0/8|172.16.0.0/12|*.172.16.0.0/12|172.29.0.0/16|*.172.29.0.0/16|localhost|*.localhost|local|*.local|crashlytics.com|*.crashlytics.com|&lt;local&gt;|*.&lt;local&gt;|192.168.0.0/16|*.192.168.0.0/16|10.0.0.0/8|*.10.0.0.0/8|172.16.0.0/12|*.172.16.0.0/12|172.29.0.0/16|*.172.29.0.0/16|local|*.local|crashlytics.com|*.crashlytics.com|&lt;local&gt;|*.&lt;local&gt;"/>
@@ -71,14 +71,12 @@
     <property name="java.class.version" value="69.0"/>
     <property name="http.proxyPort" value="7897"/>
   </properties>
-  <testcase name="divide_integerMinValueByOne_returnsIntegerMinValue" classname="com.example.CalculatorTest" time="0.009"/>
-  <testcase name="divide_twoPositiveNumbers_returnsCorrectQuotient" classname="com.example.CalculatorTest" time="0.0"/>
-  <testcase name="divide_integerMinValueByNegativeOne_handlesOverflowBehavior" classname="com.example.CalculatorTest" time="0.001"/>
-  <testcase name="divide_zeroByNegativeNumber_returnsZero" classname="com.example.CalculatorTest" time="0.001"/>
-  <testcase name="divide_negativeNumberByPositiveNumber_returnsCorrectQuotient" classname="com.example.CalculatorTest" time="0.0"/>
-  <testcase name="divide_integerMaxValueByOne_returnsIntegerMaxValue" classname="com.example.CalculatorTest" time="0.0"/>
-  <testcase name="divide_positiveNumberByNegativeNumber_returnsCorrectQuotient" classname="com.example.CalculatorTest" time="0.001"/>
-  <testcase name="divide_byZero_throwsArithmeticExceptionWithSpecificMessage" classname="com.example.CalculatorTest" time="0.001"/>
-  <testcase name="divide_zeroByPositiveNumber_returnsZero" classname="com.example.CalculatorTest" time="0.001"/>
-  <testcase name="divide_twoNegativeNumbers_returnsCorrectQuotient" classname="com.example.CalculatorTest" time="0.001"/>
+  <testcase name="add_ZeroAndZero_ReturnsZero" classname="com.example.CalculatorTest" time="0.011"/>
+  <testcase name="add_IntegerMaxValueAndOne_OverflowsToMinValue" classname="com.example.CalculatorTest" time="0.001"/>
+  <testcase name="add_TwoNegativeNumbers_ReturnsSum" classname="com.example.CalculatorTest" time="0.001"/>
+  <testcase name="add_ZeroAndNegativeNumber_ReturnsNumber" classname="com.example.CalculatorTest" time="0.001"/>
+  <testcase name="add_TwoPositiveNumbers_ReturnsSum" classname="com.example.CalculatorTest" time="0.0"/>
+  <testcase name="add_ZeroAndPositiveNumber_ReturnsNumber" classname="com.example.CalculatorTest" time="0.001"/>
+  <testcase name="add_IntegerMinValueAndMinusOne_UnderflowsToMaxValue" classname="com.example.CalculatorTest" time="0.001"/>
+  <testcase name="add_PositiveAndNegativeNumber_ReturnsCorrectResult" classname="com.example.CalculatorTest" time="0.0"/>
 </testsuite>
