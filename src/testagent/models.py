@@ -18,6 +18,18 @@ class TargetMethod:
 
 
 @dataclass
+class TestFileSummary:
+    """Summary of an existing Java test file."""
+
+    file_path: Path
+    imports: list[str] = field(default_factory=list)
+    class_signature: str = ""
+    field_declarations: list[str] = field(default_factory=list)
+    helper_method_signatures: list[str] = field(default_factory=list)
+    test_method_signatures: list[str] = field(default_factory=list)
+
+
+@dataclass
 class Dependency:
     """A single dependency extracted by the analyzer."""
 
@@ -35,6 +47,7 @@ class AnalysisContext:
     dependencies: list[Dependency]
     imports: list[str]  # Import statements from the target file
     package: str  # Package declaration
+    existing_test_summary: TestFileSummary | None = None
 
 
 @dataclass

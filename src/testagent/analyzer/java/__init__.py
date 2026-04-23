@@ -7,6 +7,7 @@ from pathlib import Path
 from testagent.analyzer.base import BaseAnalyzer
 from testagent.analyzer.java.dependency import resolve_dependencies
 from testagent.analyzer.java.java_parser import all_referenced_types, parse_target
+from testagent.analyzer.java.test_summary import summarize_existing_test_file
 from testagent.models import AnalysisContext, TargetMethod
 
 
@@ -71,10 +72,12 @@ class JavaAnalyzer(BaseAnalyzer):
             file_path=result.file_path,
             class_source=result.class_source,
         )
+        existing_test_summary = summarize_existing_test_file(self.project_path, class_name)
 
         return AnalysisContext(
             target=target,
             dependencies=dependencies,
             imports=result.imports,
             package=result.package,
+            existing_test_summary=existing_test_summary,
         )
