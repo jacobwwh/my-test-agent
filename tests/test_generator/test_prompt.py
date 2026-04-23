@@ -9,6 +9,7 @@ from testagent.models import (
     CoverageReport,
     Dependency,
     GeneratedTest,
+    TestFileSummary,
     TargetMethod,
     TestResult,
 )
@@ -78,6 +79,41 @@ class TestBuildGeneratePrompt:
         messages = build_generate_prompt(sample_context, prompts_dir=prompts_dir)
         content = messages[0]["content"]
         assert "import com.example.MathUtils;" in content
+
+    def test_includes_existing_test_summary(self, sample_context, prompts_dir):
+        sample_context.existing_test_summary = TestFileSummary(
+            file_path=Path("/project/src/test/java/com/example/CalculatorTest.java"),
+            imports=[
+                "import org.junit.jupiter.api.Test;",
+                "import static org.junit.jupiter.api.Assertions.*;",
+            ],
+            class_signature="public class CalculatorTest",
+            field_declarations=["private Calculator calculator;"],
+            helper_method_signatures=["private Calculator createCalculator();"],
+            test_method_signatures=[
+                "void testExistingAdd();",
+                "void testExistingSubtract();",
+            ],
+        )
+
+        messages = build_generate_prompt(sample_context, prompts_dir=prompts_dir)
+        content = messages[0]["content"]
+        assert "## Existing Test File Summary" in content
+        assert "CalculatorTest.java" in content
+        assert "import org.junit.jupiter.api.Test;" in content
+        assert "public class CalculatorTest" in content
+        assert "private Calculator calculator;" in content
+        assert "private Calculator createCalculator();" in content
+        assert "void testExistingAdd();" in content
+        assert "avoid duplicate imports, fields, helper methods, and test method names" in content
+        assert "Reuse compatible shared objects and helpers when they already exist." in content
+
+    def test_requires_target_method_only_tests(self, sample_context, prompts_dir):
+        messages = build_generate_prompt(sample_context, prompts_dir=prompts_dir)
+        content = messages[0]["content"]
+        assert "only for the target method" in content
+        assert "Do not generate tests for other methods" in content
+        assert "same package as the target class" in content
 
     def test_no_dependencies_section_when_empty(self, sample_target, prompts_dir):
         ctx = AnalysisContext(
@@ -168,3 +204,11 @@ class TestBuildRefinePrompt:
         content = messages[0]["content"]
         assert "CalcTest" in content
         assert "Iteration 1" in content
+
+    def test_requires_target_method_only_refinement(self, sample_context, previous_test, compile_fail_result, prompts_dir):
+        messages = build_refine_prompt(sample_context, previous_test, compile_fail_result, prompts_dir=prompts_dir)
+        content = messages[0]["content"]
+        assert "Output the COMPLETE fixed test class" in content
+        assert "same package as the target class" in content
+        assert "only for the target method" in content
+        assert "Do not add tests for other methods" in content

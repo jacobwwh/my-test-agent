@@ -76,6 +76,8 @@ def build_generate_prompt(
         target=context.target,
         dependencies=context.dependencies,
         imports=context.imports,
+        package=context.package,
+        existing_test_summary=context.existing_test_summary,
     )
     return [{"role": "user", "content": rendered}]
 
