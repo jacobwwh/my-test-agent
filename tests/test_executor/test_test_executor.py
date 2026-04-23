@@ -25,6 +25,19 @@ public class CalculatorTest {
 }
 """
 
+WRONG_GENERATED_TEST_CODE = """\
+package com.generated.wrong;
+
+import org.junit.jupiter.api.Test;
+
+public class TotallyWrongName {
+    @Test
+    void generatedMethod() {
+        assert true;
+    }
+}
+"""
+
 MAVEN_SUCCESS_OUTPUT = (
     "[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0\n"
     "[INFO] BUILD SUCCESS\n"
@@ -115,6 +128,14 @@ class TestExecuteSuccess:
         assert result.failed_tests == []
 
     @patch("testagent.executor.java.run_build", return_value=(0, MAVEN_SUCCESS_OUTPUT))
+    def test_build_command_uses_target_class_not_generated_class(self, mock_run, maven_project, tmp_path):
+        executor = TestExecutor(maven_project, reports_dir=tmp_path / "r")
+        executor.execute(_make_test(code=WRONG_GENERATED_TEST_CODE), _make_context())
+        cmd_used = mock_run.call_args[0][1]
+        assert any("com.example.CalculatorTest" in arg for arg in cmd_used)
+        assert not any("TotallyWrongName" in arg for arg in cmd_used)
+
+    @patch("testagent.executor.java.run_build", return_value=(0, MAVEN_SUCCESS_OUTPUT))
     def test_test_file_removed_after_execution(self, mock_run, maven_project, tmp_path):
         executor = TestExecutor(maven_project, reports_dir=tmp_path / "r", keep_test=False)
         executor.execute(_make_test(), _make_context())
@@ -129,6 +150,29 @@ class TestExecuteSuccess:
         executor.execute(_make_test(), _make_context())
         test_dir = maven_project / "src" / "test" / "java" / "com" / "example"
         assert (test_dir / "CalculatorTest.java").is_file()
+
+    @patch("testagent.executor.java.run_build", return_value=(0, MAVEN_SUCCESS_OUTPUT))
+    def test_preexisting_test_file_is_restored_when_keep_test_false(self, mock_run, maven_project, tmp_path):
+        test_dir = maven_project / "src" / "test" / "java" / "com" / "example"
+        test_dir.mkdir(parents=True, exist_ok=True)
+        test_file = test_dir / "CalculatorTest.java"
+        original_content = """\
+package com.example;
+
+import org.junit.jupiter.api.Test;
+
+public class CalculatorTest {
+    @Test
+    void humanTest() { assertEquals(3, 1 + 2); }
+}
+"""
+        test_file.write_text(original_content, encoding="utf-8")
+
+        executor = TestExecutor(maven_project, reports_dir=tmp_path / "r", keep_test=False)
+        executor.execute(_make_test(code=WRONG_GENERATED_TEST_CODE), _make_context())
+
+        assert test_file.is_file()
+        assert test_file.read_text(encoding="utf-8") == original_content
 
     @patch("testagent.executor.java.run_build", return_value=(0, MAVEN_SUCCESS_OUTPUT))
     def test_coverage_none_when_no_xml(self, mock_run, maven_project, tmp_path):

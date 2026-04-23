@@ -11,8 +11,7 @@ from testagent.executor.java.builder import (
     build_maven_command,
     cleanup_generated_tests,
     detect_build_tool,
-    extract_class_name_from_code,
-    extract_package_from_code,
+    expected_test_file_path,
     run_build,
     write_test_file,
 )
@@ -105,10 +104,17 @@ class JavaTestExecutor(BaseExecutor):
         """
         class_name = context.target.class_name
         method_name = context.target.method_name
+        class_parts = class_name.split(".")
+        target_package = ".".join(class_parts[:-1]) if len(class_parts) > 1 else ""
+        target_test_class = f"{class_parts[-1]}Test"
 
         # --- Write test file ---
         test_file: Path | None = None
+        preexisting_test_content: str | None = None
         try:
+            expected_path = expected_test_file_path(self.project_path, class_name)
+            if expected_path.is_file():
+                preexisting_test_content = expected_path.read_text(encoding="utf-8")
             test_file = write_test_file(
                 test_code=test.test_code,
                 project_path=self.project_path,
@@ -126,9 +132,6 @@ class JavaTestExecutor(BaseExecutor):
                 coverage=None,
             )
 
-        test_class = extract_class_name_from_code(test.test_code)
-        package = extract_package_from_code(test.test_code)
-
         # Per-target report directory keyed by class and method.
         report_dir = (
             self.reports_dir
@@ -141,11 +144,11 @@ class JavaTestExecutor(BaseExecutor):
         # --- Build command ---
         if self._build_tool == "maven":
             command = build_maven_command(
-                self.project_path, test_class, package, report_dir,
+                self.project_path, target_test_class, target_package, report_dir,
             )
         else:
             command = build_gradle_command(
-                self.project_path, test_class, package, report_dir,
+                self.project_path, target_test_class, target_package, report_dir,
             )
 
         # --- Clean stale coverage data ---
@@ -195,8 +198,12 @@ class JavaTestExecutor(BaseExecutor):
             )
         finally:
             if not self.keep_test and test_file and test_file.is_file():
-                test_file.unlink()
-                logger.info("Removed test file: %s", test_file)
+                if preexisting_test_content is None:
+                    test_file.unlink()
+                    logger.info("Removed test file: %s", test_file)
+                else:
+                    test_file.write_text(preexisting_test_content, encoding="utf-8")
+                    logger.info("Restored pre-existing test file: %s", test_file)
 
 
 # Backward-compatibility alias

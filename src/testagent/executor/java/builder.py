@@ -15,6 +15,12 @@ import re
 import subprocess
 from pathlib import Path
 
+from testagent.analyzer.java.java_parser import (
+    extract_imports as parse_imports,
+    extract_package as parse_package,
+    parse_source,
+)
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -70,6 +76,17 @@ _TEST_SRC_CANDIDATES = (
 )
 
 
+def expected_test_file_path(project_path: Path, class_name: str) -> Path:
+    """返回目标 Java 测试文件在项目中的约定路径。"""
+    parts = class_name.split(".")
+    simple_name = parts[-1]
+    package_parts = parts[:-1]
+    dest_dir = project_path / "src" / "test" / "java"
+    if package_parts:
+        dest_dir = dest_dir / Path(*package_parts)
+    return dest_dir / f"{simple_name}Test.java"
+
+
 def find_test_source_dir(project_path: Path) -> Path:
     """定位测试源码根目录。
 
@@ -119,8 +136,8 @@ def extract_package_from_code(test_code: str) -> str:
         >>> extract_package_from_code("package com.example;\\nclass A {}")
         'com.example'
     """
-    match = re.search(r"^\s*package\s+([\w.]+)\s*;", test_code, re.MULTILINE)
-    return match.group(1) if match else ""
+    source_bytes = _strip_leading_banner(test_code).encode("utf-8")
+    return parse_package(parse_source(source_bytes))
 
 
 def extract_class_name_from_code(test_code: str) -> str:
@@ -145,10 +162,79 @@ def extract_class_name_from_code(test_code: str) -> str:
         ValueError:
             当代码中不存在可识别的类声明时抛出。
     """
-    match = re.search(r"(?m)^\s*(?:public\s+)?class\s+(\w+)", test_code)
-    if match:
-        return match.group(1)
+    source_bytes = _strip_leading_banner(test_code).encode("utf-8")
+    root = parse_source(source_bytes)
+    for child in root.children:
+        if child.type == "class_declaration":
+            name_node = child.child_by_field_name("name")
+            if name_node is not None:
+                return source_bytes[name_node.start_byte:name_node.end_byte].decode("utf-8")
     raise ValueError("Cannot find class declaration in generated test code.")
+
+
+def _target_package_and_simple_name(class_name: str) -> tuple[str, str]:
+    parts = class_name.split(".")
+    if len(parts) == 1:
+        return "", parts[0]
+    return ".".join(parts[:-1]), parts[-1]
+
+
+def _header_import_lines(source: str) -> list[str]:
+    root = parse_source(_strip_leading_banner(source).encode("utf-8"))
+    return parse_imports(root)
+
+
+def _find_first_class_node(source_bytes: bytes):
+    root = parse_source(source_bytes)
+    for child in root.children:
+        if child.type == "class_declaration":
+            return root, child
+    raise ValueError("Cannot find class declaration in generated test code.")
+
+
+def _class_body_bytes(source_bytes: bytes, class_node) -> bytes:
+    body = class_node.child_by_field_name("body")
+    if body is None:
+        return b""
+    return source_bytes[body.start_byte + 1 : body.end_byte - 1]
+
+
+def _render_class_source(source_bytes: bytes, class_node, new_name: str, new_body: str) -> str:
+    name_node = class_node.child_by_field_name("name")
+    body = class_node.child_by_field_name("body")
+    if name_node is None or body is None:
+        raise ValueError("Cannot find class declaration in generated test code.")
+
+    header = source_bytes[class_node.start_byte:name_node.start_byte].decode("utf-8")
+    header += new_name
+    header += source_bytes[name_node.end_byte:body.start_byte].decode("utf-8")
+    return f"{header}{{\n{new_body.rstrip()}\n}}"
+
+
+def _strip_marked_block(body: str, class_name: str, method_name: str) -> str:
+    begin = re.escape(f"// BEGIN testagent generated tests for {class_name}#{method_name}")
+    end = re.escape(f"// END testagent generated tests for {class_name}#{method_name}")
+    pattern = re.compile(rf"(?ms)^[ \t]*{begin}[ \t]*\n.*?^[ \t]*{end}[ \t]*\n?")
+    return pattern.sub("", body).rstrip()
+
+
+def _has_generated_banner(source: str) -> bool:
+    return bool(re.match(r"(?ms)^\s*/\*.*?大模型生成.*?\*/", source))
+
+
+def _strip_leading_banner(source: str) -> str:
+    return re.sub(r"(?ms)^\s*/\*.*?大模型生成.*?\*/\s*\n?", "", source, count=1)
+
+
+def _render_generated_block(test_code: str, class_name: str, method_name: str) -> str:
+    source_bytes = _strip_leading_banner(test_code).encode("utf-8")
+    _, generated_class_node = _find_first_class_node(source_bytes)
+    generated_body = _class_body_bytes(source_bytes, generated_class_node).decode("utf-8").strip("\n")
+    begin = f"// BEGIN testagent generated tests for {class_name}#{method_name}"
+    end = f"// END testagent generated tests for {class_name}#{method_name}"
+    if generated_body:
+        return f"    {begin}\n{generated_body}\n    {end}"
+    return f"    {begin}\n    {end}"
 
 
 # ---------------------------------------------------------------------------
@@ -225,27 +311,48 @@ def write_test_file(
         >>> path.name
         'CalculatorTest.java'
     """
-    package = extract_package_from_code(test_code)
-    test_class = extract_class_name_from_code(test_code)
-
-    test_src_root = find_test_source_dir(project_path)
-    if package:
-        dest_dir = test_src_root / Path(package.replace(".", "/"))
-    else:
-        dest_dir = test_src_root
-    dest_dir.mkdir(parents=True, exist_ok=True)
-
-    dest_file = dest_dir / f"{test_class}.java"
+    target_package, target_simple_name = _target_package_and_simple_name(class_name)
+    target_test_class = f"{target_simple_name}Test"
+    dest_file = expected_test_file_path(project_path, class_name)
+    dest_file.parent.mkdir(parents=True, exist_ok=True)
 
     banner = _make_banner(class_name, method_name, iteration)
+    file_previously_existed = dest_file.is_file()
+    base_source = dest_file.read_text(encoding="utf-8") if file_previously_existed else test_code
+    source_for_parse_bytes = _strip_leading_banner(base_source).encode("utf-8")
+    root, class_node = _find_first_class_node(source_for_parse_bytes)
 
-    # Insert the banner before the package declaration (or at the top).
-    pkg_match = re.search(r"^\s*package\s+[\w.]+\s*;", test_code, re.MULTILINE)
-    if pkg_match:
-        insert_pos = pkg_match.start()
-        annotated = test_code[:insert_pos] + banner + test_code[insert_pos:]
+    generated_imports = _header_import_lines(test_code)
+    base_imports = parse_imports(root)
+    merged_imports = []
+    seen: set[str] = set()
+    for line in base_imports + generated_imports:
+        if line in seen:
+            continue
+        seen.add(line)
+        merged_imports.append(line)
+
+    body = _class_body_bytes(source_for_parse_bytes, class_node).decode("utf-8")
+    if file_previously_existed:
+        body = _strip_marked_block(body, class_name, method_name)
+        if body:
+            body = f"{body.rstrip()}\n\n{_render_generated_block(test_code, class_name, method_name)}"
+        else:
+            body = _render_generated_block(test_code, class_name, method_name)
     else:
-        annotated = banner + test_code
+        body = _render_generated_block(test_code, class_name, method_name)
+
+    class_source = _render_class_source(source_for_parse_bytes, class_node, target_test_class, body)
+
+    parts: list[str] = []
+    if _has_generated_banner(base_source) or not file_previously_existed:
+        parts.append(banner.rstrip("\n"))
+    if target_package:
+        parts.append(f"package {target_package};")
+    if merged_imports:
+        parts.append("\n".join(merged_imports))
+    parts.append(class_source)
+    annotated = "\n\n".join(parts).rstrip() + "\n"
 
     dest_file.write_text(annotated, encoding="utf-8")
     logger.info("Wrote test file: %s", dest_file)
@@ -302,7 +409,7 @@ def cleanup_generated_tests(
         except OSError as exc:
             logger.warning("Cannot read %s: %s", java_file, exc)
             continue
-        if clean_marker in content:
+        if clean_marker in content and _has_generated_banner(content):
             java_file.unlink()
             logger.info("Deleted generated test: %s", java_file)
             deleted.append(java_file)
