@@ -4,4 +4,7 @@ __pycache__/
 *$py.class
 tmp/
 generated_tests/
+
+# Sample project runtime artifacts
 under_test/sample-java-project/target/
+under_test/sample-java-project/src/test/
