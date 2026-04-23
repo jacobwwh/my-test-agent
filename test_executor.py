@@ -11,7 +11,7 @@ Usage::
     python test_executor.py --class com.example.Calculator --method add
     python test_executor.py --list                    # list available targets
     python test_executor.py --max-iterations 3        # override iteration limit
-    python test_executor.py --keep-test               # leave test files in project
+    python test_executor.py --keep-test               # retained for compatibility; merged tests are always kept
 """
 
 from __future__ import annotations
@@ -25,6 +25,7 @@ from testagent.analyzer import create_analyzer
 from testagent.cli_utils import resolve_project_path, resolve_targets
 from testagent.config import load_config
 from testagent.executor import create_executor
+from testagent.executor.java.builder import expected_test_file_path
 from testagent.generator.test_generator import TestGenerator
 from testagent.models import AnalysisContext, GeneratedTest, TestResult
 
@@ -206,6 +207,91 @@ def _print_code_preview(code: str, max_lines: int = 20) -> None:
         print(f"  | {line}")
     if len(lines) > max_lines:
         print(f"  | ... ({len(lines) - max_lines} more lines)")
+
+
+# ---------------------------------------------------------------------------
+# Test collection validation
+# ---------------------------------------------------------------------------
+
+def _expected_test_file(project_path: Path, class_name: str) -> Path:
+    """推导真实 Java 项目中对应的测试文件路径。
+
+    功能简介：
+        根据被测类的全限定名，映射到项目中的规范测试文件位置，
+        例如 `com.example.Calculator` -> `src/test/java/com/example/CalculatorTest.java`。
+
+    输入参数：
+        project_path:
+            Java 项目根目录。
+        class_name:
+            被测类的全限定名。
+
+    返回值：
+        Path:
+            对应的测试文件路径。
+    """
+    return expected_test_file_path(project_path, class_name)
+
+
+def _method_block_marker(class_name: str, method_name: str) -> str:
+    """生成生成测试块的标记文本。
+
+    功能简介：
+        返回 executor 写入真实测试集合时使用的目标方法块开始标记，
+        便于后续校验每个成功目标都已落盘。
+
+    输入参数：
+        class_name:
+            被测类的全限定名。
+        method_name:
+            被测方法名。
+
+    返回值：
+        str:
+            方法块标记文本。
+    """
+    return f"BEGIN testagent generated tests for {class_name}#{method_name}"
+
+
+def _validate_test_collection(
+    project_path: Path,
+    successful_targets: list[tuple[str, str]],
+) -> list[tuple[str, str]]:
+    """验证已成功目标对应的测试集合是否仍保留在真实项目中。
+
+    功能简介：
+        检查每个成功目标的预期测试文件是否存在，并确认文件中包含
+        该目标方法的生成块标记。发现任一缺失时打印清晰错误，并返回
+        失效的 `(class_name, method_name)` 目标列表。
+
+    输入参数：
+        project_path:
+            Java 项目根目录。
+        successful_targets:
+            所有已成功的 `(class_name, method_name)` 目标列表。
+
+    返回值：
+        list[tuple[str, str]]:
+            失效目标列表；为空表示所有检查通过。
+    """
+    invalid_targets: list[tuple[str, str]] = []
+    for class_name, method_name in successful_targets:
+        expected = _expected_test_file(project_path, class_name)
+        if not expected.is_file():
+            print(f"  Collection validation FAILED: missing test file for {class_name}#{method_name}")
+            print(f"    Expected: {expected}")
+            invalid_targets.append((class_name, method_name))
+            continue
+
+        content = expected.read_text(encoding="utf-8", errors="replace")
+        marker = _method_block_marker(class_name, method_name)
+        if marker not in content:
+            print(f"  Collection validation FAILED: missing marker for {class_name}#{method_name}")
+            print(f"    File: {expected}")
+            print(f"    Marker: {marker}")
+            invalid_targets.append((class_name, method_name))
+
+    return invalid_targets
 
 
 # ---------------------------------------------------------------------------
@@ -411,7 +497,7 @@ def parse_args() -> argparse.Namespace:
         "--keep-test",
         action="store_true",
         default=None,
-        help="Keep the generated test file in the project after execution",
+        help="Retained for compatibility; this full pipeline always keeps merged test files",
     )
     p.add_argument(
         "--reports-dir",
@@ -439,6 +525,8 @@ def main() -> None:
     功能简介：
         负责读取配置、解析目标、初始化分析器/生成器/执行器，
         并逐个执行 Analyzer -> Generator -> Executor 的完整流程。
+        该脚本始终保留合并后的真实项目测试文件，不再按 `keep_test`
+        选项切换清理行为。
 
     输入参数：
         无。
@@ -498,7 +586,7 @@ def main() -> None:
     print(f"  API:           {config.api_base_url}")
     print(f"  Model:         {config.model}")
     print(f"  Max iter:      {config.max_iterations}")
-    print(f"  Keep test:     {config.keep_test}")
+    print("  Keep test:     True (this full pipeline always keeps merged test files)")
     print(f"  Min branch cov: {config.min_branch_coverage * 100:.0f}%")
     print(f"  Reports dir:   {args.reports_dir}")
     print(f"  Targets:       {len(targets)}")
@@ -516,20 +604,28 @@ def main() -> None:
         config.language,
         project_path,
         reports_dir=args.reports_dir,
-        keep_test=config.keep_test,
+        keep_test=True,
     )
 
     # ── Run ─────────────────────────────────────────────────────────
-    results: list[tuple[str, bool]] = []
+    results: list[tuple[tuple[str, str], bool]] = []
     for class_name, method_name in targets:
-        label = f"{_short(class_name)}.{method_name}"
+        target = (class_name, method_name)
         ok = run_one(
             class_name, method_name,
             analyzer, generator, executor,
             max_iterations=config.max_iterations,
             min_branch_coverage=config.min_branch_coverage,
         )
-        results.append((label, ok))
+        results.append((target, ok))
+        successful_targets = [result_target for result_target, passed in results if passed]
+        invalid_targets = _validate_test_collection(project_path, successful_targets)
+        if invalid_targets:
+            invalid_set = set(invalid_targets)
+            for idx, (result_target, passed) in enumerate(results):
+                if passed and result_target in invalid_set:
+                    results[idx] = (result_target, False)
+            successful_targets = [result_target for result_target, passed in results if passed]
 
     # ── Summary ─────────────────────────────────────────────────────
     print(f"\n{_sep()}")
@@ -537,7 +633,8 @@ def main() -> None:
     print(_sep())
     passed = sum(1 for _, ok in results if ok)
     failed = len(results) - passed
-    for label, ok in results:
+    for (class_name, method_name), ok in results:
+        label = f"{_short(class_name)}.{method_name}"
         mark = "OK  " if ok else "FAIL"
         print(f"  [{mark}] {label}")
     print(f"\n  {passed} succeeded, {failed} failed out of {len(results)} targets")
