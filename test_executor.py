@@ -10,6 +10,7 @@ Usage::
     python test_executor.py --target Calculator.add   # single target
     python test_executor.py --class com.example.Calculator --method add
     python test_executor.py --list                    # list available targets
+    python test_executor.py --all                     # discover all testable project methods
     python test_executor.py --max-iterations 3        # override iteration limit
     python test_executor.py --keep-test               # retained for compatibility; merged tests are always kept
 """
@@ -35,6 +36,7 @@ from testagent.models import AnalysisContext, GeneratedTest, TestResult
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 SAMPLE_PROJECT = PROJECT_ROOT / "under_test" / "sample-java-project"
+SAMPLE_PROJECT_OUT = "../sample-java-project"  #A sample project outside the testagent project
 REPORTS_ROOT = PROJECT_ROOT / "tmp" / "reports"
 
 DEFAULT_TARGETS = [
@@ -46,6 +48,46 @@ DEFAULT_TARGETS = [
 ]
 
 PRESET_TARGETS = DEFAULT_TARGETS
+
+
+def _targets_for_all_flag(all_targets: bool, analyzer) -> list[tuple[str, str]]:
+    """根据 `--all` 参数选择默认目标列表。
+
+    功能简介：
+        当 `--all` 未启用时返回脚本内置 `DEFAULT_TARGETS`；启用时调用
+        analyzer 模块的自动发现能力，使用项目中所有可测试方法覆盖默认目标。
+
+    输入参数：
+        all_targets:
+            是否启用 `--all`。
+        analyzer:
+            当前语言的分析器实例，需要实现 `list_testable_methods()`。
+
+    返回值：
+        list[tuple[str, str]]:
+            后续目标解析使用的默认目标列表。
+
+    异常：
+        ValueError:
+            当当前语言分析器不支持自动发现，或项目中没有发现可测方法时抛出。
+    """
+    if not all_targets:
+        return DEFAULT_TARGETS
+
+    discover = getattr(analyzer, "list_testable_methods", None)
+    if discover is None:
+        raise ValueError(
+            f"{type(analyzer).__name__} does not support testable method discovery."
+        )
+
+    try:
+        targets = list(discover())
+    except NotImplementedError as exc:
+        raise ValueError(str(exc)) from exc
+
+    if not targets:
+        raise ValueError("No testable methods discovered in project.")
+    return targets
 
 
 # ---------------------------------------------------------------------------
@@ -468,6 +510,13 @@ def parse_args() -> argparse.Namespace:
         help="List available targets and exit",
     )
     p.add_argument(
+        "--all",
+        "-all",
+        dest="all_targets",
+        action="store_true",
+        help="Discover all testable methods in the project and use them as default targets",
+    )
+    p.add_argument(
         "--project",
         type=Path,
         default=None,
@@ -541,11 +590,12 @@ def main() -> None:
     args = parse_args()
 
     # ── List mode ───────────────────────────────────────────────────
-    if args.list:
+    if args.list and not args.all_targets:
         print("Preset targets:")
         for cls, method in PRESET_TARGETS:
             print(f"  {_short(cls)}.{method:<20}  ({cls})")
         print("\nFor arbitrary projects, use --class <fully.qualified.Class> --method <methodName>.")
+        print("Use --all --list to discover testable methods from the project source tree.")
         return
 
     # ── Config ──────────────────────────────────────────────────────
@@ -559,6 +609,20 @@ def main() -> None:
     }.items() if v is not None}
     config = load_config(**overrides)
     project_path = resolve_project_path(args.project, config.project_path, SAMPLE_PROJECT)
+    analyzer = create_analyzer(config.language, project_path)
+
+    try:
+        default_targets = _targets_for_all_flag(args.all_targets, analyzer)
+    except ValueError as exc:
+        print(f"Error: {exc}")
+        sys.exit(1)
+
+    if args.list:
+        print("Discovered targets:" if args.all_targets else "Preset targets:")
+        for cls, method in default_targets:
+            print(f"  {_short(cls)}.{method:<20}  ({cls})")
+        print("\nFor arbitrary projects, use --class <fully.qualified.Class> --method <methodName>.")
+        return
 
     # ── Resolve targets ─────────────────────────────────────────────
     try:
@@ -566,7 +630,7 @@ def main() -> None:
             target=args.target,
             class_name=args.class_name,
             method_name=args.method_name,
-            default_targets=PRESET_TARGETS,
+            default_targets=default_targets,
             short_name=_short,
         )
     except ValueError as exc:
@@ -592,7 +656,6 @@ def main() -> None:
     print(f"  Targets:       {len(targets)}")
 
     # ── Build modules ───────────────────────────────────────────────
-    analyzer = create_analyzer(config.language, project_path)
     generator = TestGenerator(
         api_base_url=config.api_base_url,
         api_key=config.api_key,

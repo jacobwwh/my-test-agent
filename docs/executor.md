@@ -557,6 +557,12 @@ python test_executor.py --target Calculator.add --max-iterations 3
 # 测试所有预设目标；完整脚本始终保留合并后的项目测试文件，--keep-test 为兼容参数
 python test_executor.py --keep-test
 
+# 使用 analyzer 自动发现项目中所有可测试方法，并替代默认目标列表
+python test_executor.py --all
+
+# 只查看自动发现出的目标，不调用 LLM
+python test_executor.py --all --list
+
 # 指定自定义项目路径和报告目录
 python test_executor.py \
     --project /path/to/java-project \
@@ -574,3 +580,5 @@ python test_executor.py \
 | `OrderService.calculateTotal` | `com.example.service.OrderService` |
 
 脚本对每个目标依次执行 分析 → 生成 → 写入/合并 → 执行（→ 精炼 → 执行）的循环，最终打印通过/失败汇总，任意目标失败时以非零状态码退出。该脚本会把通过验证的 Java 测试集合保留在真实项目的 `src/test/java/<package>/<ClassName>Test.java` 中，并校验每个成功目标对应的 marker block 仍存在。
+
+`--all` / `-all` 会先调用 analyzer 的 `list_testable_methods()`，用自动发现出的全部 `(class_name, method_name)` 覆盖脚本内置的 `DEFAULT_TARGETS`。当前 Java 发现规则为：跳过 `src/test`，跳过构造器、接口方法、`private`、`abstract`、`native` 和无方法体的方法。

@@ -6,7 +6,11 @@ from pathlib import Path
 
 from testagent.analyzer.base import BaseAnalyzer
 from testagent.analyzer.java.dependency import resolve_dependencies
-from testagent.analyzer.java.java_parser import all_referenced_types, parse_target
+from testagent.analyzer.java.java_parser import (
+    all_referenced_types,
+    list_testable_methods,
+    parse_target,
+)
 from testagent.analyzer.java.test_summary import summarize_existing_test_file
 from testagent.models import AnalysisContext, TargetMethod
 
@@ -86,3 +90,17 @@ class JavaAnalyzer(BaseAnalyzer):
             package=result.package,
             existing_test_summary=existing_test_summary,
         )
+
+    def list_testable_methods(self) -> list[tuple[str, str]]:
+        """列出项目中所有可作为测试目标的 Java 方法。
+
+        功能简介：
+            委托 Java 解析模块扫描源码目录，返回所有非 private 等可测试
+            方法的 `(class_name, method_name)` 列表，供 `test_executor.py --all`
+            批量生成测试目标使用。
+
+        返回值：
+            list[tuple[str, str]]:
+                所有发现的可测试 Java 方法。
+        """
+        return list_testable_methods(self.project_path)

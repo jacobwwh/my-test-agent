@@ -1,1 +1,4 @@
 /Users/wangwh-local/Desktop/mycode/my-test-agent/under_test/sample-java-project/src/test/java/com/example/CalculatorTest.java
+/Users/wangwh-local/Desktop/mycode/my-test-agent/under_test/sample-java-project/src/test/java/com/example/model/CustomerTest.java
+/Users/wangwh-local/Desktop/mycode/my-test-agent/under_test/sample-java-project/src/test/java/com/example/model/OrderTest.java
+/Users/wangwh-local/Desktop/mycode/my-test-agent/under_test/sample-java-project/src/test/java/com/example/service/OrderServiceTest.java

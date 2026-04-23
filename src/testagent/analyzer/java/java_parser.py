@@ -4,6 +4,7 @@ Responsibilities:
 - Find .java files by fully-qualified class name within a project source tree
 - Parse Java files into ASTs
 - Locate a target method within a class
+- Discover testable methods within project source files
 - Extract method source, class source, imports, package
 - Extract referenced type names (fields, params, return type, body types,
   superclass, interfaces)
@@ -76,6 +77,30 @@ def find_java_file(project_path: Path, class_name: str) -> Path | None:
         if candidate.is_file():
             return candidate
     return None
+
+
+def _is_test_source_path(project_path: Path, file_path: Path) -> bool:
+    try:
+        parts = file_path.relative_to(project_path).parts
+    except ValueError:
+        return False
+    return len(parts) >= 2 and parts[0] == "src" and parts[1] == "test"
+
+
+def _iter_java_source_files(project_path: Path) -> list[Path]:
+    seen: set[Path] = set()
+    files: list[Path] = []
+    for src_dir in _SOURCE_DIRS:
+        source_root = project_path / src_dir
+        if not source_root.is_dir():
+            continue
+        for java_file in sorted(source_root.rglob("*.java")):
+            resolved = java_file.resolve()
+            if resolved in seen or _is_test_source_path(project_path, java_file):
+                continue
+            seen.add(resolved)
+            files.append(java_file)
+    return files
 
 
 # ---------------------------------------------------------------------------
@@ -247,6 +272,73 @@ def _find_class_node(root: ts.Node, simple_name: str) -> ts.Node | None:
             if name_node and _node_text(name_node) == simple_name:
                 return child
     return None
+
+
+def _top_level_class_nodes(root: ts.Node) -> list[ts.Node]:
+    return [child for child in root.children if child.type == "class_declaration"]
+
+
+def _has_modifier(node: ts.Node, modifier_name: str) -> bool:
+    for child in node.children:
+        if child.type != "modifiers":
+            continue
+        for modifier in child.children:
+            if _node_text(modifier) == modifier_name:
+                return True
+    return False
+
+
+def _is_testable_method_node(method_node: ts.Node) -> bool:
+    if method_node.child_by_field_name("body") is None:
+        return False
+    return not any(
+        _has_modifier(method_node, modifier)
+        for modifier in ("private", "abstract", "native")
+    )
+
+
+def list_testable_methods(project_path: Path) -> list[tuple[str, str]]:
+    """列出项目源码中可作为测试目标的 Java 方法。
+
+    功能简介：
+        扫描项目源码目录中的 `.java` 文件，跳过 `src/test` 下的测试源码，
+        只收集顶层 class 中带方法体且非 `private`、非 `abstract`、非 `native`
+        的方法。构造器、接口方法和无方法体声明不会被返回。
+
+    输入参数：
+        project_path:
+            Java 项目根目录。
+
+    返回值：
+        list[tuple[str, str]]:
+            按源码相对路径和文件内声明顺序排列的 `(class_name, method_name)` 列表。
+
+    使用示例：
+        >>> list_testable_methods(Path("/repo/demo"))
+        [('com.example.Calculator', 'add')]
+    """
+    targets: list[tuple[str, str]] = []
+    for java_file in _iter_java_source_files(project_path):
+        source_bytes = java_file.read_bytes()
+        root = parse_source(source_bytes)
+        package = extract_package(root)
+        for class_node in _top_level_class_nodes(root):
+            name_node = class_node.child_by_field_name("name")
+            if name_node is None:
+                continue
+            simple_name = _node_text(name_node)
+            class_name = f"{package}.{simple_name}" if package else simple_name
+            body = class_node.child_by_field_name("body")
+            if body is None:
+                continue
+            for member in body.children:
+                if member.type != "method_declaration" or not _is_testable_method_node(member):
+                    continue
+                method_name_node = member.child_by_field_name("name")
+                if method_name_node is None:
+                    continue
+                targets.append((class_name, _node_text(method_name_node)))
+    return targets
 
 
 def find_method_node(class_node: ts.Node, method_name: str) -> ts.Node | None:

@@ -43,3 +43,22 @@ class BaseAnalyzer(ABC):
             AnalysisContext:
                 包含目标方法、依赖、imports 等信息的分析上下文。
         """
+
+    def list_testable_methods(self) -> list[tuple[str, str]]:
+        """列出当前项目中可作为测试目标的方法。
+
+        功能简介：
+            各语言分析器可按自身规则实现该方法，用于批量测试生成入口。
+            默认实现表示当前语言尚不支持自动发现。
+
+        返回值：
+            list[tuple[str, str]]:
+                `(class_name, method_name)` 形式的目标方法列表。
+
+        异常：
+            NotImplementedError:
+                当前语言分析器未实现自动发现时抛出。
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support testable method discovery."
+        )

@@ -109,6 +109,21 @@ analyzer.analyze("com.example.Calculator", "bad")
 
 ---
 
+### `list_testable_methods(self) -> list[tuple[str, str]]`
+
+列出当前项目中可作为测试生成目标的方法。Java 实现会扫描源码目录，
+返回 `(class_name, method_name)` 列表，供 `test_executor.py --all`
+覆盖默认目标列表。
+
+当前 Java 筛选规则：
+
+- 只扫描源码目录中的 `.java` 文件，跳过 `src/test` 下的测试源码
+- 只收集顶层 `class` 中的方法，不收集接口方法
+- 跳过构造器、`private` 方法、`abstract` 方法、`native` 方法和没有方法体的方法
+- 保留 `public`、`protected`、包可见方法以及 `static` 方法
+
+---
+
 ## 底层 API：`java_parser` 模块
 
 **所在模块**：`testagent.analyzer.java.java_parser`
@@ -177,6 +192,18 @@ method = find_method_node(cls, "add")  # ts.Node 或 None
 
 ```python
 names = list_method_names(cls)  # ["add", "divide"]
+```
+
+### `list_testable_methods(project_path: Path) -> list[tuple[str, str]]`
+
+扫描 Java 项目源码目录，返回所有可测试方法的 `(class_name, method_name)`。
+该函数是 `JavaAnalyzer.list_testable_methods()` 的底层实现。
+
+```python
+from testagent.analyzer.java.java_parser import list_testable_methods
+
+targets = list_testable_methods(Path("my-project"))
+# [("com.example.Calculator", "add"), ...]
 ```
 
 ### `extract_type_refs(class_node: ts.Node, method_node: ts.Node | None) -> TypeRefs`

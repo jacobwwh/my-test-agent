@@ -67,6 +67,7 @@ project:
 | `--target` | 使用预设目标，例如 `Calculator.add` |
 | `--class` | 指定任意目标的全限定类名，例如 `com.example.Calculator` |
 | `--method` | 与 `--class` 搭配，指定目标方法名 |
+| `--all` / `-all` | 使用 analyzer 自动发现被测项目中所有可测试方法，并覆盖默认目标列表 |
 | `--language` | 目标语言（默认 `java`，后续支持 `cpp` 等） |
 | `--model` | 覆盖 LLM 模型名称 |
 | `--max-iterations` | 覆盖最大迭代次数 |
@@ -129,6 +130,12 @@ python test_executor.py --list
 
 # 运行所有预设目标
 python test_executor.py
+
+# 自动发现项目中所有可测试方法并逐个生成/执行
+python test_executor.py --all
+
+# 查看自动发现出的目标
+python test_executor.py --all --list
 
 # 运行单个目标，限制迭代次数
 python test_executor.py --target Calculator.divide --max-iterations 3
