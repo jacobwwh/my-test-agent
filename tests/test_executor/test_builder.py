@@ -1,5 +1,6 @@
 """Tests for testagent.executor.builder."""
 
+import re
 from pathlib import Path
 from unittest.mock import patch
 
@@ -130,6 +131,117 @@ public class CalculatorTest {
     }
 }
 """
+
+SHARED_FIELD_FIRST_TEST_CODE = """\
+package com.generated.wrong;
+
+import org.junit.jupiter.api.Test;
+
+public class CalculatorTest {
+    private final Calculator calculator = new Calculator();
+
+    @Test
+    void testAdd() {
+        calculator.add(1, 2);
+    }
+}
+"""
+
+SHARED_FIELD_SECOND_TEST_CODE = """\
+package com.generated.wrong;
+
+import org.junit.jupiter.api.Test;
+
+public class CalculatorTest {
+    private final Calculator calculator = new Calculator();
+
+    @Test
+    void testDivide() {
+        calculator.divide(4, 2);
+    }
+}
+"""
+
+SHARED_FIELD_FORMATTED_TEST_CODE = """\
+package com.example;
+
+import org.junit.jupiter.api.Test;
+
+public class CalculatorTest {
+    private final Calculator
+            calculator = new Calculator();
+
+    @Test
+    void keepsHumanTest() {
+        calculator.add(1, 1);
+    }
+}
+"""
+
+EXTRA_CLASS_BODY_GENERATED_TEST_CODE = """\
+package com.generated.wrong;
+
+import org.junit.jupiter.api.Test;
+
+public class CalculatorTest {
+    // generated helper state
+    static {
+        System.setProperty("calculator.mode", "test");
+    }
+
+    public CalculatorTest() {
+    }
+
+    private final Calculator calculator = new Calculator();
+
+    @Test
+    void testDivide() {
+        calculator.divide(4, 2);
+    }
+}
+"""
+
+STRING_LITERAL_HUMAN_FIELD_TEST_CODE = """\
+package com.example;
+
+public class CalculatorTest {
+    private final String label = "a b";
+}
+"""
+
+STRING_LITERAL_GENERATED_FIELD_TEST_CODE = """\
+package com.generated.wrong;
+
+public class CalculatorTest {
+    private final String label = "ab";
+
+    void generatedMethod() {
+    }
+}
+"""
+
+TEXT_BLOCK_HUMAN_FIELD_TEST_CODE = '''\
+package com.example;
+
+public class CalculatorTest {
+    private final String template = """
+            a \\""" b
+            """;
+}
+'''
+
+TEXT_BLOCK_GENERATED_FIELD_TEST_CODE = '''\
+package com.generated.wrong;
+
+public class CalculatorTest {
+    private final String template = """
+            a \\"""b
+            """;
+
+    void generatedMethod() {
+    }
+}
+'''
 
 
 # ---------------------------------------------------------------------------
@@ -399,6 +511,124 @@ class TestWriteTestFile:
         content = dest.read_text(encoding="utf-8")
         assert "public class CalculatorTest" in content
         assert "void generatedMethod()" in content
+
+    def test_duplicate_field_is_kept_only_once_across_generated_blocks(self, tmp_path):
+        dest = write_test_file(
+            SHARED_FIELD_FIRST_TEST_CODE,
+            tmp_path,
+            "com.example.Calculator",
+            "add",
+            1,
+        )
+        dest = write_test_file(
+            SHARED_FIELD_SECOND_TEST_CODE,
+            tmp_path,
+            "com.example.Calculator",
+            "divide",
+            2,
+        )
+
+        content = dest.read_text(encoding="utf-8")
+        field_line = "private final Calculator calculator = new Calculator();"
+        assert content.count(field_line) == 1
+        assert "// BEGIN testagent generated tests for com.example.Calculator#add" in content
+        assert "// BEGIN testagent generated tests for com.example.Calculator#divide" in content
+        assert "void testAdd()" in content
+        assert "void testDivide()" in content
+
+    def test_duplicate_field_matching_ignores_whitespace(self, tmp_path):
+        dest = expected_test_file_path(tmp_path, "com.example.Calculator")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(SHARED_FIELD_FORMATTED_TEST_CODE, encoding="utf-8")
+
+        written = write_test_file(
+            SHARED_FIELD_SECOND_TEST_CODE,
+            tmp_path,
+            "com.example.Calculator",
+            "divide",
+            1,
+        )
+
+        content = written.read_text(encoding="utf-8")
+        field_pattern = r"private\s+final\s+Calculator\s+calculator\s*=\s*new\s+Calculator\(\);"
+        assert len(re.findall(field_pattern, content)) == 1
+        assert "void keepsHumanTest()" in content
+        assert "void testDivide()" in content
+
+    def test_replacing_same_target_block_keeps_its_only_field(self, tmp_path):
+        dest = write_test_file(
+            SHARED_FIELD_FIRST_TEST_CODE,
+            tmp_path,
+            "com.example.Calculator",
+            "add",
+            1,
+        )
+        dest = write_test_file(
+            SHARED_FIELD_FIRST_TEST_CODE,
+            tmp_path,
+            "com.example.Calculator",
+            "add",
+            2,
+        )
+
+        content = dest.read_text(encoding="utf-8")
+        field_line = "private final Calculator calculator = new Calculator();"
+        assert content.count(field_line) == 1
+        assert content.count("// BEGIN testagent generated tests for com.example.Calculator#add") == 1
+
+    def test_rendered_generated_block_preserves_non_field_members(self, tmp_path):
+        dest = expected_test_file_path(tmp_path, "com.example.Calculator")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(SHARED_FIELD_FORMATTED_TEST_CODE, encoding="utf-8")
+
+        written = write_test_file(
+            EXTRA_CLASS_BODY_GENERATED_TEST_CODE,
+            tmp_path,
+            "com.example.Calculator",
+            "divide",
+            1,
+        )
+
+        content = written.read_text(encoding="utf-8")
+        assert "// generated helper state" in content
+        assert 'System.setProperty("calculator.mode", "test");' in content
+        assert "public CalculatorTest()" in content
+        assert "void testDivide()" in content
+        assert len(re.findall(r"private\s+final\s+Calculator\s+calculator\s*=\s*new\s+Calculator\(\);", content)) == 1
+
+    def test_field_signature_keeps_string_literal_whitespace_significant(self, tmp_path):
+        dest = expected_test_file_path(tmp_path, "com.example.Calculator")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(STRING_LITERAL_HUMAN_FIELD_TEST_CODE, encoding="utf-8")
+
+        written = write_test_file(
+            STRING_LITERAL_GENERATED_FIELD_TEST_CODE,
+            tmp_path,
+            "com.example.Calculator",
+            "label",
+            1,
+        )
+
+        content = written.read_text(encoding="utf-8")
+        assert 'private final String label = "a b";' in content
+        assert 'private final String label = "ab";' in content
+
+    def test_field_signature_keeps_escaped_text_block_quotes_inside_literal(self, tmp_path):
+        dest = expected_test_file_path(tmp_path, "com.example.Calculator")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(TEXT_BLOCK_HUMAN_FIELD_TEST_CODE, encoding="utf-8")
+
+        written = write_test_file(
+            TEXT_BLOCK_GENERATED_FIELD_TEST_CODE,
+            tmp_path,
+            "com.example.Calculator",
+            "template",
+            1,
+        )
+
+        content = written.read_text(encoding="utf-8")
+        assert 'a \\""" b' in content
+        assert 'a \\"""b' in content
 
     def test_cleanup_preserves_human_file_with_markers_but_no_banner(self, tmp_path):
         test_file = tmp_path / "src" / "test" / "java" / "com" / "example" / "HumanTest.java"

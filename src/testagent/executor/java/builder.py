@@ -199,6 +199,145 @@ def _class_body_bytes(source_bytes: bytes, class_node) -> bytes:
     return source_bytes[body.start_byte + 1 : body.end_byte - 1]
 
 
+def _class_member_nodes(class_node) -> list:
+    body = class_node.child_by_field_name("body")
+    if body is None:
+        return []
+    return body.named_children
+
+
+def _node_text_bytes(source_bytes: bytes, node) -> bytes:
+    return source_bytes[node.start_byte:node.end_byte]
+
+
+def _find_java_text_block_end(source: str, start: int) -> int:
+    search_from = start
+    while True:
+        end = source.find('"""', search_from)
+        if end == -1:
+            return -1
+        backslashes = 0
+        cursor = end - 1
+        while cursor >= 0 and source[cursor] == "\\":
+            backslashes += 1
+            cursor -= 1
+        if backslashes % 2 == 0:
+            return end
+        search_from = end + 1
+
+
+def _compact_java_whitespace_outside_literals(source: str) -> str:
+    compacted: list[str] = []
+    i = 0
+    while i < len(source):
+        if source.startswith('"""', i):
+            end = _find_java_text_block_end(source, i + 3)
+            if end == -1:
+                compacted.append(source[i:])
+                break
+            compacted.append(source[i : end + 3])
+            i = end + 3
+            continue
+        char = source[i]
+        if char in {'"', "'"}:
+            quote = char
+            start = i
+            i += 1
+            escaped = False
+            while i < len(source):
+                current = source[i]
+                if escaped:
+                    escaped = False
+                elif current == "\\":
+                    escaped = True
+                elif current == quote:
+                    i += 1
+                    break
+                i += 1
+            compacted.append(source[start:i])
+            continue
+        if source.startswith("//", i):
+            i = source.find("\n", i)
+            if i == -1:
+                break
+            continue
+        if source.startswith("/*", i):
+            end = source.find("*/", i + 2)
+            if end == -1:
+                break
+            i = end + 2
+            continue
+        if char.isspace():
+            i += 1
+            continue
+        compacted.append(char)
+        i += 1
+    return "".join(compacted)
+
+
+def _field_signature(source_bytes: bytes, node) -> str:
+    return _compact_java_whitespace_outside_literals(_node_text_bytes(source_bytes, node).decode("utf-8"))
+
+
+def _class_field_signatures(source_bytes: bytes, class_node) -> set[str]:
+    signatures: set[str] = set()
+    for member in _class_member_nodes(class_node):
+        if member.type != "field_declaration":
+            continue
+        signatures.add(_field_signature(source_bytes, member))
+    return signatures
+
+
+def _class_field_signatures_from_body(body: str) -> set[str]:
+    source_bytes = f"class TestAgentGeneratedMergeTarget {{\n{body}\n}}".encode("utf-8")
+    _, class_node = _find_first_class_node(source_bytes)
+    return _class_field_signatures(source_bytes, class_node)
+
+
+def _expand_removal_range(source_bytes: bytes, start: int, end: int, min_start: int, max_end: int) -> tuple[int, int]:
+    while start > min_start and source_bytes[start - 1] in b" \t":
+        start -= 1
+    while end < max_end and source_bytes[end] in b" \t":
+        end += 1
+    if source_bytes[end : end + 2] == b"\r\n":
+        end += 2
+    elif end < max_end and source_bytes[end : end + 1] in {b"\n", b"\r"}:
+        end += 1
+    return start, end
+
+
+def _render_class_body_without_duplicate_fields(
+    source_bytes: bytes,
+    class_node,
+    excluded_field_signatures: set[str] | None = None,
+) -> str:
+    excluded = excluded_field_signatures or set()
+    body = class_node.child_by_field_name("body")
+    if body is None:
+        return ""
+    body_start = body.start_byte + 1
+    body_end = body.end_byte - 1
+    removal_ranges: list[tuple[int, int]] = []
+    for member in _class_member_nodes(class_node):
+        if member.type != "field_declaration":
+            continue
+        if _field_signature(source_bytes, member) not in excluded:
+            continue
+        removal_ranges.append(
+            _expand_removal_range(source_bytes, member.start_byte, member.end_byte, body_start, body_end)
+        )
+    if not removal_ranges:
+        return source_bytes[body_start:body_end].decode("utf-8").strip("\n")
+
+    chunks: list[bytes] = []
+    cursor = body_start
+    for start, end in removal_ranges:
+        chunks.append(source_bytes[cursor:start])
+        cursor = end
+    chunks.append(source_bytes[cursor:body_end])
+    return b"".join(chunks).decode("utf-8").strip("\n")
+
+
 def _render_class_source(source_bytes: bytes, class_node, new_name: str, new_body: str) -> str:
     name_node = class_node.child_by_field_name("name")
     body = class_node.child_by_field_name("body")
@@ -226,10 +365,19 @@ def _strip_leading_banner(source: str) -> str:
     return re.sub(r"(?ms)^\s*/\*.*?大模型生成.*?\*/\s*\n?", "", source, count=1)
 
 
-def _render_generated_block(test_code: str, class_name: str, method_name: str) -> str:
+def _render_generated_block(
+    test_code: str,
+    class_name: str,
+    method_name: str,
+    excluded_field_signatures: set[str] | None = None,
+) -> str:
     source_bytes = _strip_leading_banner(test_code).encode("utf-8")
     _, generated_class_node = _find_first_class_node(source_bytes)
-    generated_body = _class_body_bytes(source_bytes, generated_class_node).decode("utf-8").strip("\n")
+    generated_body = _render_class_body_without_duplicate_fields(
+        source_bytes,
+        generated_class_node,
+        excluded_field_signatures=excluded_field_signatures,
+    )
     begin = f"// BEGIN testagent generated tests for {class_name}#{method_name}"
     end = f"// END testagent generated tests for {class_name}#{method_name}"
     if generated_body:
@@ -333,12 +481,14 @@ def write_test_file(
         merged_imports.append(line)
 
     body = _class_body_bytes(source_for_parse_bytes, class_node).decode("utf-8")
+    existing_field_signatures: set[str] = set()
     if file_previously_existed:
         body = _strip_marked_block(body, class_name, method_name)
+        existing_field_signatures = _class_field_signatures_from_body(body)
         if body:
-            body = f"{body.rstrip()}\n\n{_render_generated_block(test_code, class_name, method_name)}"
+            body = f"{body.rstrip()}\n\n{_render_generated_block(test_code, class_name, method_name, existing_field_signatures)}"
         else:
-            body = _render_generated_block(test_code, class_name, method_name)
+            body = _render_generated_block(test_code, class_name, method_name, existing_field_signatures)
     else:
         body = _render_generated_block(test_code, class_name, method_name)
 
