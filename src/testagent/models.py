@@ -19,7 +19,12 @@ class TargetMethod:
 
 @dataclass
 class TestFileSummary:
-    """Summary of an existing Java test file."""
+    """真实项目中已存在 Java 测试文件的结构摘要。
+
+    该摘要只记录 import、测试类签名、字段/对象声明、helper 方法签名和
+    JUnit 测试方法签名，不包含完整测试实现。生成 prompt 使用它来复用
+    共享代码并避免重复测试方法。
+    """
 
     file_path: Path
     imports: list[str] = field(default_factory=list)
@@ -41,7 +46,11 @@ class Dependency:
 
 @dataclass
 class AnalysisContext:
-    """Output of the Analyzer module."""
+    """Analyzer 模块输出的完整生成上下文。
+
+    `existing_test_summary` 仅在真实项目中存在对应测试文件时填充；
+    不存在对应文件时为 `None`。
+    """
 
     target: TargetMethod
     dependencies: list[Dependency]

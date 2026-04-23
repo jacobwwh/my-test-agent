@@ -1,9 +1,9 @@
-"""Build tool detection, test file injection, and command execution.
+"""Build tool detection, project test-file merging, and command execution.
 
 Responsibilities:
 - Detect Maven vs Gradle from project layout
-- Write the generated test file into the project's test source tree,
-  prepending a "大模型生成" banner comment
+- Create or merge the generated Java test class into the canonical project
+  test file under src/test/java/<package>/<ClassName>Test.java
 - Construct and execute the build command (mvn / gradle)
 - Return raw stdout+stderr and the return code for downstream parsing
 """
@@ -122,7 +122,9 @@ def extract_package_from_code(test_code: str) -> str:
     """从测试代码中提取 package 名称。
 
     功能简介：
-        读取测试代码顶部的 `package` 声明，用于推导最终测试文件的目录结构。
+        读取测试代码顶部的 `package` 声明，供兼容调用和辅助解析使用。
+        真实项目中的最终测试文件路径不再依赖生成代码的 package，
+        而是由被测类全限定名推导。
 
     输入参数：
         test_code:
@@ -144,7 +146,9 @@ def extract_class_name_from_code(test_code: str) -> str:
     """从测试代码中提取顶层类名。
 
     功能简介：
-        使用正则匹配测试代码中的第一个顶层类声明，供构造文件名和执行参数使用。
+        使用 Java AST 读取测试代码中的第一个顶层类声明，供兼容调用和
+        生成代码校验使用。写入真实项目时，最终测试类名会被规范化为
+        被测类对应的 `<SimpleClassName>Test`。
 
     输入参数：
         test_code:
@@ -435,18 +439,22 @@ def write_test_file(
     """将测试代码写入被测项目的测试目录。
 
     功能简介：
-        根据测试代码中的 package 和类名确定目标路径，自动创建父目录，
-        在文件顶部插入 AI 生成 banner 后写入磁盘。
+        根据被测类全限定名推导规范测试文件路径：
+        `src/test/java/<package>/<SimpleClassName>Test.java`。
+        若文件不存在，则新建测试文件并添加 AI 生成 banner；若文件已存在，
+        则保留原有人工测试内容，合并 import，并用目标方法专属 marker block
+        添加或替换本轮生成的测试代码。生成代码中的 package 和类名不会决定
+        最终写入路径。
 
     输入参数：
         test_code:
-            待写入的测试代码。
+            LLM 生成的完整测试类源码。
         project_path:
             被测 Java 项目根目录。
         class_name:
             被测类的全限定类名。
         method_name:
-            被测方法名。
+            被测方法名，用于定位/替换对应的生成测试 block。
         iteration:
             当前迭代次数。
 
@@ -523,8 +531,10 @@ def cleanup_generated_tests(
     """清理项目中的自动生成测试文件。
 
     功能简介：
-        遍历测试源码目录，删除带有指定标记字符串的 `.java` 文件；
-        当标记为空字符串时，删除测试目录下所有 `.java` 文件。
+        遍历测试源码目录，默认只删除同时带有指定标记字符串和文件头部
+        AI 生成 banner 的 `.java` 文件，避免误删人工测试文件中保留的
+        `testagent` marker block。当标记为空字符串时，删除测试目录下
+        所有 `.java` 文件。
 
     输入参数：
         project_path:

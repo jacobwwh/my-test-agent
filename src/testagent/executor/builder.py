@@ -1,4 +1,8 @@
-"""Build tool detection, test file injection, and command execution.
+"""Legacy build tool detection, test file injection, and command execution.
+
+This module is kept for backward compatibility. The active Java executor uses
+``testagent.executor.java.builder``, which implements canonical project test
+file create-or-merge behavior.
 
 Responsibilities:
 - Detect Maven vs Gradle from project layout

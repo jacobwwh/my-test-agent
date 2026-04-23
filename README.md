@@ -24,7 +24,7 @@ pipeline:
   min_branch_coverage: 1.0               # 目标分支覆盖率（0.0–1.0）
 
 executor:
-  keep_test: false                       # 执行后是否保留测试文件
+  keep_test: false                       # Executor API 执行后是否保留/恢复测试文件
   jacoco_enabled: true
 ```
 
@@ -70,7 +70,7 @@ project:
 | `--language` | 目标语言（默认 `java`，后续支持 `cpp` 等） |
 | `--model` | 覆盖 LLM 模型名称 |
 | `--max-iterations` | 覆盖最大迭代次数 |
-| `--keep-test` | 执行后保留测试文件 |
+| `--keep-test` | Executor API 兼容参数；完整 `test_executor.py` 流水线始终保留合并后的真实项目测试文件 |
 | `--min-branch-coverage` | 覆盖目标分支覆盖率（0.0–1.0） |
 | `--project` | 指定被测项目路径 |
 | `--reports-dir` | 指定 JaCoCo 报告输出目录 |
@@ -118,7 +118,10 @@ python test_generator.py --language java --target Calculator.add
 
 ### test_executor.py — 完整流水线（生成 + 执行 + 迭代优化）
 
-执行 **Analyzer -> Generator -> Executor** 完整流程：生成测试 -> 编译执行 -> 收集覆盖率 -> 根据错误和覆盖率缺口迭代优化，直到测试通过且覆盖率达标或达到最大迭代次数。需要配置 API Key 和本地 Maven/Gradle 环境。
+执行 **Analyzer -> Generator -> Executor** 完整流程：生成测试 -> 写入真实项目测试文件 -> 编译执行 -> 收集覆盖率 -> 根据错误和覆盖率缺口迭代优化，直到测试通过且覆盖率达标或达到最大迭代次数。需要配置 API Key 和本地 Maven/Gradle 环境。
+
+Java 测试会合并到真实项目中与被测类对应的测试文件：
+`src/test/java/<package>/<ClassName>Test.java`。若文件不存在则新建；若已存在则追加/替换当前被测方法对应的 `testagent` marker block。不同被测方法的测试位于各自独立 block 中，import、字段、helper 等共享代码会尽量复用并去重。完整 `test_executor.py` 流水线始终保留这些合并后的项目测试文件，`--keep-test` 仅作为兼容参数保留。
 
 ```bash
 # 列出可用目标
@@ -130,7 +133,7 @@ python test_executor.py
 # 运行单个目标，限制迭代次数
 python test_executor.py --target Calculator.divide --max-iterations 3
 
-# 保留生成的测试文件，设置覆盖率阈值为 80%
+# 设置覆盖率阈值为 80%；--keep-test 为兼容参数，完整流水线始终保留合并后的测试文件
 python test_executor.py --keep-test --min-branch-coverage 0.8
 
 # 自定义项目路径和报告目录

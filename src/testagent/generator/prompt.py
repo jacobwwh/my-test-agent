@@ -49,12 +49,14 @@ def build_generate_prompt(
     """构造首次生成测试用例的聊天消息。
 
     功能简介：
-        将分析阶段得到的目标方法、依赖源码和 import 信息渲染进
-        `generate_test.txt` 模板，生成可直接发送给 LLM 的消息列表。
+        将分析阶段得到的目标方法、依赖源码、import、package 信息，
+        以及可选的既有测试文件摘要渲染进 `generate_test.txt` 模板，
+        生成可直接发送给 LLM 的消息列表。
 
     输入参数：
         context:
-            分析上下文，包含目标方法、依赖源码、imports 和 package 信息。
+            分析上下文，包含目标方法、依赖源码、imports、package，
+            以及可能存在的 `existing_test_summary`。
         prompts_dir:
             自定义 Prompt 模板目录；为 `None` 时根据 `language` 选择默认目录。
         language:

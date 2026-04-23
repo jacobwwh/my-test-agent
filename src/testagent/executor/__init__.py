@@ -21,7 +21,8 @@ def create_executor(language: str, project_path: Path, **kwargs) -> BaseExecutor
             被测项目的根目录。
         **kwargs:
             传递给执行器构造函数的额外关键字参数，例如 `reports_dir`、
-            `keep_test`、`build_timeout`。
+            `keep_test`、`build_timeout`。`keep_test` 的具体清理/恢复语义
+            由语言执行器实现。
 
     返回值：
         BaseExecutor:

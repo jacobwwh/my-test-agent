@@ -56,7 +56,7 @@ executor = create_executor("java", project_path, reports_dir=..., keep_test=Fals
 
 **位置**：`testagent/executor/java/__init__.py`（也可通过 `testagent.executor.TestExecutor` 向后兼容导入）
 
-执行模块的 Java 主入口，将写文件、运行构建、解析结果、读取覆盖率、清理文件五个步骤串联为一次 `execute()` 调用。
+执行模块的 Java 主入口，将测试文件写入/合并、运行构建、解析结果、读取覆盖率、按配置清理或恢复测试文件几个步骤串联为一次 `execute()` 调用。
 
 #### 构造参数
 
@@ -64,7 +64,7 @@ executor = create_executor("java", project_path, reports_dir=..., keep_test=Fals
 |------|------|--------|------|
 | `project_path` | `Path` | 必填 | 被测 Java 项目的根目录 |
 | `reports_dir` | `Path \| None` | `<testagent_root>/tmp/reports` | JaCoCo XML 报告的存储根目录 |
-| `keep_test` | `bool` | `False` | 若为 `True`，执行完毕后不删除生成的测试文件 |
+| `keep_test` | `bool` | `False` | 若为 `True`，执行完毕后保留合并后的项目测试文件；若为 `False`，新建测试文件会删除，执行前已存在的测试文件会恢复原内容 |
 | `build_timeout` | `int` | `300` | 等待构建进程的最长秒数 |
 
 构造时自动调用 `detect_build_tool()` 检测 `project_path` 下使用的构建工具（Maven 或 Gradle），若两者都不存在则抛出 `FileNotFoundError`。
@@ -75,9 +75,9 @@ executor = create_executor("java", project_path, reports_dir=..., keep_test=Fals
 
 **执行步骤**：
 
-1. **写文件**：调用 `write_test_file()` 将测试代码注入到项目的 `src/test/java/<package>/` 目录，同时在文件头部添加"大模型生成"横幅注释。若写文件失败（例如代码中找不到 `public class` 声明），立即返回 `compiled=False` 的 `TestResult`。
+1. **写文件**：调用 `write_test_file()` 将测试代码写入或合并到项目的规范测试文件：`src/test/java/<package>/<ClassName>Test.java`。目标路径由被测类 `context.target.class_name` 推导，不依赖 LLM 生成代码中的 package/class。若测试文件已存在，则合并 import、替换当前目标方法对应的 `testagent` marker block，并尽量复用已有字段/helper；若文件不存在，则新建完整测试文件。若写文件失败（例如代码中找不到可识别的 class 声明），立即返回 `compiled=False` 的 `TestResult`。
 
-2. **构造命令**：根据检测到的构建工具，调用 `build_maven_command()` 或 `build_gradle_command()` 生成命令列表。命令中包含 `-Dtest`（Maven）或 `--tests`（Gradle）参数，将本次运行限定在生成的测试类上，并同时触发 JaCoCo 报告生成。
+2. **构造命令**：根据检测到的构建工具，调用 `build_maven_command()` 或 `build_gradle_command()` 生成命令列表。命令中包含 `-Dtest`（Maven）或 `--tests`（Gradle）参数，将本次运行限定在被测类对应的 `<ClassName>Test` 上，并同时触发 JaCoCo 报告生成。
 
 3. **运行构建**：调用 `run_build()` 在 `project_path` 目录下执行命令，合并 stdout + stderr，返回 `(returncode, output)`。构建超时或进程异常时返回 `compiled=False`。
 
@@ -89,7 +89,7 @@ executor = create_executor("java", project_path, reports_dir=..., keep_test=Fals
    ```
    找到则调用 `parse_jacoco_xml()` 解析并填充 `CoverageReport`，否则覆盖率字段为 `None`。
 
-6. **清理**：若 `keep_test=False`，删除写入的测试文件。
+6. **清理/恢复**：若 `keep_test=False`，本轮新建的测试文件会删除；如果测试文件执行前已存在，则恢复为写入前的原始内容。若 `keep_test=True`，保留合并后的项目测试文件。根目录的完整流水线脚本 `test_executor.py` 会固定以 `keep_test=True` 创建 executor，用于累积真实项目测试集合。
 
 **调用示例**：
 
@@ -151,20 +151,21 @@ Maven 优先于 Gradle 检测。
 
 #### `extract_package_from_code(test_code: str) -> str`
 
-用正则从生成的测试代码中提取 `package` 声明，未找到时返回空字符串。
+使用 Java AST 从生成的测试代码中提取 `package` 声明，未找到时返回空字符串。该函数仅用于兼容和辅助解析；最终测试文件路径由被测类名推导。
 
 #### `extract_class_name_from_code(test_code: str) -> str`
 
-从生成的测试代码中提取第一个 `public class` 的类名。若找不到，抛出 `ValueError`——这是 `write_test_file()` 失败的主要原因之一。
+使用 Java AST 从生成的测试代码中提取第一个顶层 class 的类名。若找不到，抛出 `ValueError`。最终测试类名会按被测类规范化为 `<ClassName>Test`。
 
 ---
 
 #### `write_test_file(test_code, project_path, class_name, method_name, iteration) -> Path`
 
-将测试代码写入项目的测试源码树。
+将测试代码写入或合并到项目的测试源码树。
 
-- 目标路径：`<test_src_root>/<package_path>/<TestClass>.java`
-- 在 `package` 声明之前（或文件开头）插入"大模型生成"横幅注释：
+- 目标路径固定由被测类推导：`src/test/java/<package_path>/<ClassName>Test.java`。
+- LLM 生成代码中的 package/class 不用于决定最终路径；写入时会按被测类的包名和规范测试类名重建文件头。
+- 若目标测试文件不存在：创建新文件，并在 `package` 声明之前插入"大模型生成"横幅注释：
 
   ```java
   /*
@@ -175,6 +176,9 @@ Maven 优先于 Gradle 检测。
    */
   ```
 
+- 若目标测试文件已存在：不向人工文件添加横幅注释；保留原有测试、字段、helper 和 import，合并生成测试中的新 import；移除同一 `class_name#method_name` 的旧 marker block 后插入新 block。
+- 每个生成 block 以 `// BEGIN testagent generated tests for <Class>#<method>` 和 `// END ...` 包围，不同被测方法互不覆盖。
+- 重复字段声明会基于归一化签名去重，允许不同被测方法共享对象/fixture。
 - 返回写入文件的绝对路径。
 
 ---
@@ -188,13 +192,13 @@ Maven 优先于 Gradle 检测。
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `project_path` | `Path` | 必填 | 被测 Java 项目的根目录 |
-| `clean_marker` | `str` | `"大模型生成"` | 仅删除文件内容包含该标记的 `.java` 文件；若传入**空字符串**，则删除测试目录下的所有 `.java` 文件 |
+| `clean_marker` | `str` | `"大模型生成"` | 仅删除文件内容包含该标记且文件头部有生成横幅的 `.java` 文件；若传入**空字符串**，则删除测试目录下的所有 `.java` 文件 |
 
 **行为**：
 
 1. 通过 `find_test_source_dir()` 定位测试源码根目录（通常为 `src/test/java`）。
 2. 递归扫描目录下所有 `.java` 文件：
-   - `clean_marker` 非空：读取文件内容，仅删除包含该标记字符串的文件。
+   - `clean_marker` 非空：读取文件内容，仅删除包含该标记字符串且带生成横幅的文件。只有 marker block 但没有横幅的人工测试文件不会被默认删除。
    - `clean_marker` 为空字符串：直接删除所有 `.java` 文件。
 3. 删除文件后，自下而上清理遗留的空目录。
 4. 返回已删除文件的路径列表。
@@ -385,7 +389,7 @@ JaCoCo XML 结构参考：
 GeneratedTest + AnalysisContext
           │
           ▼
-   write_test_file()          ──→  <project>/src/test/java/.../XxxTest.java
+   write_test_file()          ──→  create/merge <project>/src/test/java/.../XxxTest.java
           │
           ▼
 build_maven_command()
@@ -412,7 +416,7 @@ build_maven_command()
                    parse_jacoco_xml()  ──→  CoverageReport
                               │
                               ▼
-                   [cleanup test file if keep_test=False]
+                   [delete new test file or restore pre-existing file if keep_test=False]
                               │
                               ▼
                          TestResult
@@ -460,6 +464,8 @@ tmp/reports/
 | | `iteration: int` | 当前迭代轮次，决定报告目录名 |
 | `AnalysisContext` | `target.class_name` | 被测类的全限定名 |
 | | `target.method_name` | 被测方法名 |
+| | `package` | 被测源码文件的包名，用于规范测试文件 package |
+| | `existing_test_summary` | 既有测试文件摘要，生成阶段使用；执行阶段主要依赖目标类和方法 |
 
 ### 输出
 
@@ -491,7 +497,7 @@ tmp/reports/
 
 | 配置字段 | 默认值 | 说明 |
 |---------|--------|------|
-| `keep_test` | `False` | 是否保留生成的测试文件 |
+| `keep_test` | `False` | 是否保留合并后的项目测试文件；为 `False` 时新建文件删除、已有文件恢复 |
 | `jacoco_enabled` | `True` | 是否启用 JaCoCo 覆盖率收集（当前由命令中包含 `jacoco:report` 实现） |
 
 在 `configs/default.yaml` 中对应的节：
@@ -508,7 +514,7 @@ executor:
 
 | 场景 | 行为 |
 |------|------|
-| 测试代码缺少 `public class` 声明 | 返回 `compiled=False`，`compile_errors` 中包含错误描述 |
+| 测试代码缺少可识别的 class 声明 | 返回 `compiled=False`，`compile_errors` 中包含错误描述 |
 | 目录创建失败 / 文件写入失败 | 返回 `compiled=False`，`compile_errors` 中包含异常信息 |
 | 构建进程超时 | 捕获 `TimeoutExpired`，返回 `compiled=False` |
 | 构建进程其他异常 | 捕获通用 `Exception`，返回 `compiled=False` |
@@ -548,7 +554,7 @@ python test_executor.py --list
 # 测试单个方法（最多 3 次迭代）
 python test_executor.py --target Calculator.add --max-iterations 3
 
-# 测试所有预设目标，保留生成的测试文件
+# 测试所有预设目标；完整脚本始终保留合并后的项目测试文件，--keep-test 为兼容参数
 python test_executor.py --keep-test
 
 # 指定自定义项目路径和报告目录
@@ -567,4 +573,4 @@ python test_executor.py \
 | `OrderService.findOrder` | `com.example.service.OrderService` |
 | `OrderService.calculateTotal` | `com.example.service.OrderService` |
 
-脚本对每个目标依次执行 分析 → 生成 → 执行（→ 精炼 → 执行）的循环，最终打印通过/失败汇总，任意目标失败时以非零状态码退出。
+脚本对每个目标依次执行 分析 → 生成 → 写入/合并 → 执行（→ 精炼 → 执行）的循环，最终打印通过/失败汇总，任意目标失败时以非零状态码退出。该脚本会把通过验证的 Java 测试集合保留在真实项目的 `src/test/java/<package>/<ClassName>Test.java` 中，并校验每个成功目标对应的 marker block 仍存在。

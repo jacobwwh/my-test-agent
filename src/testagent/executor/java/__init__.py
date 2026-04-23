@@ -30,8 +30,9 @@ class JavaTestExecutor(BaseExecutor):
     """Java 测试执行器。
 
     功能简介：
-        负责把生成的 JUnit 测试写入被测项目、调用构建工具执行测试、
-        解析编译/运行结果，并在可用时收集 JaCoCo 覆盖率。
+        负责把生成的 JUnit 测试写入或合并到被测项目的规范测试文件，
+        调用构建工具执行测试，解析编译/运行结果，并在可用时收集
+        JaCoCo 覆盖率。
 
     使用示例：
         >>> executor = JavaTestExecutor(Path("/repo/java-project"))
@@ -57,7 +58,9 @@ class JavaTestExecutor(BaseExecutor):
             reports_dir:
                 覆盖率报告输出目录；为 `None` 时使用默认目录。
             keep_test:
-                是否在执行结束后保留写入项目中的测试文件。
+                是否在执行结束后保留合并后的项目测试文件。为 `False` 时，
+                本轮新建的测试文件会删除；执行前已存在的测试文件会恢复
+                原内容。
             build_timeout:
                 构建/测试命令的超时时间，单位为秒。
 
@@ -84,8 +87,10 @@ class JavaTestExecutor(BaseExecutor):
         """执行生成的测试并返回结构化结果。
 
         功能简介：
-            该方法会将测试代码写入项目测试目录，调用 Maven/Gradle 执行构建，
-            解析编译与测试输出，并尝试读取 JaCoCo 覆盖率，最后按配置清理测试文件。
+            该方法会将测试代码写入或合并到项目测试目录中的规范测试文件，
+            调用 Maven/Gradle 执行对应测试类，解析编译与测试输出，并尝试
+            读取 JaCoCo 覆盖率。最后根据 `keep_test` 决定保留合并结果、
+            删除本轮新建文件，或恢复执行前已存在的测试文件内容。
 
         输入参数：
             test:

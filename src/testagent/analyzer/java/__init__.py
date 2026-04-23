@@ -16,7 +16,9 @@ class JavaAnalyzer(BaseAnalyzer):
 
     功能简介：
         对外提供统一的分析入口，负责协调源码解析与依赖解析，
-        将目标方法转换为生成测试所需的 `AnalysisContext`。
+        将目标方法转换为生成测试所需的 `AnalysisContext`。若真实项目中
+        已存在对应测试文件，还会附加该文件的结构摘要，供生成 prompt
+        复用已有 import、字段、helper 和测试方法签名信息。
 
     使用示例：
         >>> analyzer = JavaAnalyzer(Path("/path/to/java-project"))
@@ -30,7 +32,9 @@ class JavaAnalyzer(BaseAnalyzer):
 
         功能简介：
             先解析目标类与目标方法，再提取其中引用到的类型，
-            并解析这些类型对应的项目内依赖源码，最终返回 `AnalysisContext`。
+            并解析这些类型对应的项目内依赖源码；同时尝试查找对应的
+            `src/test/java/<package>/<ClassName>Test.java` 并生成摘要，
+            最终返回 `AnalysisContext`。
 
         输入参数：
             class_name:
@@ -40,7 +44,8 @@ class JavaAnalyzer(BaseAnalyzer):
 
         返回值：
             AnalysisContext:
-                包含目标方法、依赖源码、imports 和 package 的分析上下文。
+                包含目标方法、依赖源码、imports、package，以及可选的
+                `existing_test_summary`。
 
         使用示例：
             >>> analyzer = JavaAnalyzer(Path("/repo/demo"))

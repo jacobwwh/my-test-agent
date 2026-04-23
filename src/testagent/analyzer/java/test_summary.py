@@ -1,4 +1,4 @@
-"""Summaries for existing Java test files."""
+"""生成真实项目中既有 Java 测试文件的结构摘要。"""
 
 from __future__ import annotations
 
@@ -23,7 +23,11 @@ _TEST_ANNOTATION_NAMES = {
 
 
 def expected_test_file_path(project_path: Path, class_name: str) -> Path:
-    """Return the conventional path for an existing Java test file."""
+    """返回被测类对应的真实项目测试文件约定路径。
+
+    路径规则为：
+    `src/test/java/<package>/<SimpleClassName>Test.java`。
+    """
 
     parts = class_name.split(".")
     simple_name = parts[-1]
@@ -65,7 +69,13 @@ def _is_test_method(node) -> bool:
 
 
 def summarize_existing_test_file(project_path: Path, class_name: str) -> TestFileSummary | None:
-    """Summarize an existing Java test file if it is present."""
+    """在对应 Java 测试文件存在时返回结构摘要。
+
+    功能简介：
+        查找 `class_name` 对应的规范测试文件，提取 import、测试类签名、
+        类级字段/对象声明、helper 方法签名和 JUnit 测试方法签名。
+        若文件不存在或找不到对应测试类，返回 `None`。
+    """
 
     test_file = expected_test_file_path(project_path, class_name)
     if not test_file.is_file():

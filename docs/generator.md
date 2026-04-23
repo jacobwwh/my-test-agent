@@ -179,6 +179,8 @@ except LLMAPIError as e:
 | `target` | `context.target`（`TargetMethod`） |
 | `dependencies` | `context.dependencies`（`list[Dependency]`） |
 | `imports` | `context.imports`（`list[str]`） |
+| `package` | `context.package`（目标源码文件的包名） |
+| `existing_test_summary` | `context.existing_test_summary`（对应真实项目测试文件的摘要，可能为 `None`） |
 
 #### `build_refine_prompt(context, previous_test, test_result, prompts_dir=None, language="java")`
 
@@ -205,11 +207,15 @@ except LLMAPIError as e:
 → 被测类完整源码
 → [可选] 依赖类/接口/枚举源码
 → [可选] Import 语句
+→ [可选] 已存在测试文件摘要（import、类签名、字段/helper、测试方法签名）
 → 生成要求（JUnit 5、覆盖边界条件、Mockito、输出格式）
 ```
 
 生成要求摘要：
 - 生成完整的、可独立编译运行的 JUnit 5 测试类
+- 测试类使用目标源码的同一 package 和规范名称 `<SourceClass>Test`
+- 只为当前被测方法生成测试，不为同一类中的其他方法补测
+- 当 `existing_test_summary` 存在时，复用兼容的 import、字段、对象和 helper，避免重复 test method 名称
 - 使用 `org.junit.jupiter.api.@Test`
 - 覆盖正常、边界、异常场景
 - 如需 Mock，使用 Mockito
@@ -363,7 +369,7 @@ config = load_config(
 
 ## 单元测试
 
-测试位于 `tests/test_generator/`，共 28 个测试用例，无需真实 API（使用 `unittest.mock.patch` Mock LLM）：
+测试位于 `tests/test_generator/`，无需真实 API（使用 `unittest.mock.patch` Mock LLM）：
 
 | 测试文件 | 覆盖内容 |
 |----------|----------|
@@ -396,3 +402,5 @@ python test_generator.py
 ```
 
 生成的测试文件保存在 `generated_tests/<项目名>/` 下，文件名格式为 `<ClassName>_<methodName>_Test.java`。
+
+注意：这里描述的是根目录 `test_generator.py` 的“只生成不执行”脚本行为。完整执行脚本 `test_executor.py` 会进一步把通过验证的 Java 测试合并到真实项目的 `src/test/java/<package>/<ClassName>Test.java` 中。

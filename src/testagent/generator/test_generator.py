@@ -25,7 +25,7 @@ def canonical_test_class_name(class_name: str) -> str:
 
     功能简介：
         将全限定类名转换为约定的测试类名格式 `<SimpleClassName>Test`，
-        供测试代码规范化和执行器构造文件名时使用。
+        供测试代码规范化和真实项目测试文件合并时使用。
 
     输入参数：
         class_name:
@@ -48,7 +48,8 @@ def normalize_test_class_name(test_code: str, class_name: str) -> str:
 
     功能简介：
         LLM 生成的测试类名可能不稳定；该函数会把测试代码中第一个类声明
-        替换为规范名称，确保执行器可以稳定推导测试文件名和 `-Dtest` 参数。
+        替换为规范名称，确保写入层可以把生成类体稳定合并到真实项目中
+        对应的 `<SimpleClassName>Test`。
 
     输入参数：
         test_code:

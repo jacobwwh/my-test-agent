@@ -11,6 +11,7 @@
 | `analyzer/java/__init__.py` | Java 实现：`JavaAnalyzer` |
 | `analyzer/java/java_parser.py` | 基于 tree-sitter 的 Java AST 解析 |
 | `analyzer/java/dependency.py` | 依赖类型解析与源码提取 |
+| `analyzer/java/test_summary.py` | 对应真实项目测试文件的结构摘要 |
 
 ---
 
@@ -33,6 +34,10 @@ print(ctx.target.class_source)
 # 项目内依赖列表
 for dep in ctx.dependencies:
     print(f"{dep.kind} {dep.qualified_name}")
+
+# 若对应测试文件已存在，可供生成 prompt 复用的摘要
+if ctx.existing_test_summary:
+    print(ctx.existing_test_summary.class_signature)
 ```
 
 ---
@@ -78,7 +83,7 @@ analyzer = create_analyzer("java", Path("/path/to/project"))
 | `class_name` | `str` | 全限定类名，如 `"com.example.service.OrderService"` |
 | `method_name` | `str` | 方法名，如 `"process"` |
 
-**返回值**：`AnalysisContext` 数据类（见下方数据模型部分）。
+**返回值**：`AnalysisContext` 数据类（见下方数据模型部分）。其中 `existing_test_summary` 会在对应测试文件存在时提供摘要，供生成模块避免重复 import、字段、helper 和测试方法名。
 
 **异常**：
 
@@ -261,6 +266,33 @@ deps = resolve_dependencies(
 
 ---
 
+## 底层 API：`test_summary` 模块
+
+**所在模块**：`testagent.analyzer.java.test_summary`
+
+### `expected_test_file_path(project_path: Path, class_name: str) -> Path`
+
+根据被测类全限定名返回真实项目中的约定测试文件路径：
+
+```python
+expected_test_file_path(Path("my-project"), "com.example.Calculator")
+# -> Path("my-project/src/test/java/com/example/CalculatorTest.java")
+```
+
+### `summarize_existing_test_file(project_path: Path, class_name: str) -> TestFileSummary | None`
+
+若对应测试文件存在，则解析并返回摘要；若文件不存在或无法找到规范测试类，则返回 `None`。摘要包含：
+
+- import 语句
+- 测试类签名
+- 类级字段/对象声明
+- 非测试 helper 方法签名
+- JUnit 测试方法签名，包括 `@Test`、`@ParameterizedTest`、`@RepeatedTest`、`@TestFactory`、`@TestTemplate`
+
+该摘要不会把完整测试实现发送给生成器，只提供足够的结构信息，便于 prompt 引导 LLM 复用已有共享代码并避免重复方法名。
+
+---
+
 ## 数据模型
 
 ### `TargetMethod`
@@ -292,6 +324,20 @@ deps = resolve_dependencies(
 | `dependencies` | `list[Dependency]` | 项目内已解析的依赖列表 |
 | `imports` | `list[str]` | 目标文件的 import 语句 |
 | `package` | `str` | 目标文件的包声明 |
+| `existing_test_summary` | `TestFileSummary \| None` | 对应真实项目测试文件的结构摘要；文件不存在时为 `None` |
+
+### `TestFileSummary`
+
+对应真实项目测试文件的结构摘要，由 `summarize_existing_test_file()` 生成，并通过 `AnalysisContext.existing_test_summary` 传给生成模块。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `file_path` | `Path` | 对应测试文件路径 |
+| `imports` | `list[str]` | 测试文件 import 语句 |
+| `class_signature` | `str` | 测试类声明签名，不包含类体 |
+| `field_declarations` | `list[str]` | 类级字段/对象声明 |
+| `helper_method_signatures` | `list[str]` | 非 JUnit 测试方法签名 |
+| `test_method_signatures` | `list[str]` | JUnit 测试方法签名 |
 
 ### `TypeRefs`
 
