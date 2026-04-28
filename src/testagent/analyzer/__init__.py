@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Program analysis module — language-specific source parsing and dependency extraction."""
 
 from __future__ import annotations

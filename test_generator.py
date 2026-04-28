@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """End-to-end integration test: Analyzer -> Generator.
 
 Runs the full analysis + test-generation pipeline against a Java project and

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Test generation module.
 
 Provides :class:`TestGenerator` for generating and refining JUnit tests

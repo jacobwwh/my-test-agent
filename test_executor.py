@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """End-to-end pipeline: Analyzer → Generator → Executor (with iterative refinement).
 
 Runs the full test-generation-and-execution loop against a Java project.

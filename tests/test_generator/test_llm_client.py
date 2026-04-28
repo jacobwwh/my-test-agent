@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Tests for LLM client (mocked OpenAI API)."""
 
 from unittest.mock import MagicMock, patch

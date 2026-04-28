@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Tests for testagent.cli_utils."""
 
 from pathlib import Path

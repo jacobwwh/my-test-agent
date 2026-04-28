@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Test execution module — language-specific test compilation, execution, and coverage collection."""
 
 from __future__ import annotations

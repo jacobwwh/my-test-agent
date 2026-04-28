@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Abstract base class for language-specific test executors."""
 
 from __future__ import annotations

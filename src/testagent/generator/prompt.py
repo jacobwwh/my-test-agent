@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Prompt template loading and rendering."""
 
 from __future__ import annotations

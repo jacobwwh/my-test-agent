@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Build tool detection, project test-file merging, and command execution.
 
 Responsibilities:

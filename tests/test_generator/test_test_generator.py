@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Tests for TestGenerator (generate and refine with mocked LLM)."""
 
 from pathlib import Path

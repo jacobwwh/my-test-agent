@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Java-specific test executor implementation."""
 
 from __future__ import annotations

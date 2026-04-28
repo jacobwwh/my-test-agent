@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Tests for prompt building."""
 
 from pathlib import Path

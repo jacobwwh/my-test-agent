@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Tests for TestExecutor (testagent.executor.__init__)."""
 
 from pathlib import Path

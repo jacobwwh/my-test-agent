@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Legacy build tool detection, test file injection, and command execution.
 
 This module is kept for backward compatibility. The active Java executor uses

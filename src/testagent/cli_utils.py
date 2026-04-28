@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Shared helpers for script-level CLI resolution."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Thin wrapper around OpenAI-compatible chat completion API."""
 
 from __future__ import annotations

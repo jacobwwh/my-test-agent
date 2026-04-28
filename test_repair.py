@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Repair pipeline: load existing failing tests → execute → iterative refinement.
 
 Reads Java test files from ``failed_test_case/``, extracts the target class and

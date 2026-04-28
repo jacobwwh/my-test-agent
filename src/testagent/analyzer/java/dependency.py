@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Dependency resolution for Java source projects.
 
 Given a set of type names and import statements from a target file, this

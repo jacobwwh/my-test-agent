@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Tests for testagent.analyzer.java_parser."""
 
 from pathlib import Path

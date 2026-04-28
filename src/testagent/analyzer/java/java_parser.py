@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Java source parsing using tree-sitter.
 
 Responsibilities:

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Convenience script to run analyzer tests from the project root.
 
 Usage:

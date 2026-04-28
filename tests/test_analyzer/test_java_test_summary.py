@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import shutil
 
 from testagent.analyzer.java import JavaAnalyzer

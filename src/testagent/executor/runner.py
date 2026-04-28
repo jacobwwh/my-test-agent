@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Parse Maven / Gradle build output into structured result fields.
 
 Functions here are pure: they receive the raw build output string and return

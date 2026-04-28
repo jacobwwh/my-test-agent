@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """生成真实项目中既有 Java 测试文件的结构摘要。"""
 
 from __future__ import annotations

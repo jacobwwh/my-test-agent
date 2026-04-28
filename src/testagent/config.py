@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Configuration loading from YAML with CLI parameter overrides."""
 
 from __future__ import annotations

@@ -28,6 +28,8 @@ When working in this repository, you must prioritize:
 
 为函数编写文档时默认使用中文。
 
+所有 Python 文件都必须包含 `# -*- coding: utf-8 -*-` 文件头；如果文件包含 shebang，该编码声明应紧随 shebang 之后，以确保程序能够同时在 Linux 和 Windows 下按 UTF-8 解析运行。
+
 ### Rule 1: Never freely operate on the remote GPU server
 
 Do **not** run arbitrary commands on the remote server.

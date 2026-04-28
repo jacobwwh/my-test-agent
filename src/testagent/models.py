@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Data models for the test agent pipeline."""
 
 from __future__ import annotations

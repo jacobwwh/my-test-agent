@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Shared pytest fixtures."""
 
 from pathlib import Path

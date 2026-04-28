@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Test generation orchestration using LLM."""
 
 from __future__ import annotations

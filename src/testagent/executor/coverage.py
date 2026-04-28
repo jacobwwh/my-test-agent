@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Parse JaCoCo XML coverage reports.
 
 JaCoCo XML format (jacoco.xml):
