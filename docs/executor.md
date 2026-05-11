@@ -2,7 +2,7 @@
 
 ## 概述
 
-测试执行模块（`testagent.executor`）负责将 Generator 生成的测试代码写入目标项目，通过构建工具编译并运行测试，解析构建输出，最后读取覆盖率报告——将这些结果封装为 `TestResult` 返回给上层的迭代精炼循环。当前实现支持 Java（Maven/Gradle + JaCoCo）；其他语言通过工厂函数扩展。
+测试执行模块（`testagent.executor`）负责将 Generator 生成的测试代码写入目标项目，通过构建工具编译并运行测试，解析构建输出，最后读取覆盖率报告或执行反馈——将这些结果封装为 `TestResult` 返回给上层的迭代精炼循环。当前实现支持 Java（Maven/Gradle + JaCoCo）和 C++（Makefile + plain `assert`）。
 
 模块结构如下：
 
@@ -14,6 +14,9 @@
 | `executor/java/builder.py` | 构建工具检测、测试文件写入、命令构造与执行 |
 | `executor/java/runner.py` | 纯函数：解析 Maven / Gradle 构建输出 |
 | `executor/java/coverage.py` | 解析 JaCoCo XML 报告，提取覆盖率数据 |
+| `executor/cpp/__init__.py` | C++ 实现：`CppTestExecutor` |
+| `executor/cpp/builder.py` | Makefile 检测、生成测试文件写入、命令构造与执行 |
+| `executor/cpp/runner.py` | 纯函数：解析 C++ 编译/运行输出 |
 
 ---
 
@@ -46,9 +49,41 @@ executor = create_executor("java", project_path, reports_dir=..., keep_test=Fals
 
 | `language` 值 | 对应实现 |
 |--------------|---------|
+| `"cpp"` | `CppTestExecutor` |
 | `"java"` | `JavaTestExecutor` |
 
 传入不支持的语言时抛出 `ValueError`。
+
+---
+
+## C++ 实现：`CppTestExecutor`
+
+**位置**：`testagent/executor/cpp/__init__.py`
+
+C++ 执行器要求被测项目根目录存在 `Makefile`，并提供名为 `testagent-test` 的目标。执行器会传入以下变量：
+
+| 变量 | 说明 |
+|------|------|
+| `TEST_FILE` | 本轮生成的 C++ 测试源文件路径 |
+| `TEST_BINARY` | 期望输出的测试二进制路径 |
+| `REPORT_DIR` | 本轮执行报告目录 |
+
+生成测试文件写入：
+
+```
+tests/testagent/generated/<Class>_<method>_iter<N>.cpp
+```
+
+当前 C++ 路径不合并人工测试文件，也不解析覆盖率报告；如果编译成功且测试二进制退出码为 0，则 `TestResult.passed=True`。编译器/链接器输出中的 `error:`、`undefined reference` 等会进入 `compile_errors`，供 Generator 的 `refine()` 轮次修复。
+
+Makefile 最小目标示例：
+
+```make
+testagent-test:
+	mkdir -p $(dir $(TEST_BINARY)) $(REPORT_DIR)
+	$(CXX) $(CXXFLAGS) $(SOURCES) $(TEST_FILE) -o $(TEST_BINARY)
+	$(TEST_BINARY)
+```
 
 ---
 

@@ -2,7 +2,7 @@
 
 ## 概述
 
-测试用例生成模块（`testagent.generator`）负责接收程序分析模块输出的 `AnalysisContext`，调用大语言模型（LLM）生成 JUnit 5 测试用例，并在迭代修复流程中根据执行反馈对测试进行改进。
+测试用例生成模块（`testagent.generator`）负责接收程序分析模块输出的 `AnalysisContext`，调用大语言模型（LLM）生成目标语言测试用例，并在迭代修复流程中根据执行反馈对测试进行改进。
 
 模块由三个子组件组成：
 
@@ -18,8 +18,8 @@
 |------|------|
 | `prompts/java/generate_test.txt` | Java：首次生成测试用例 |
 | `prompts/java/fix_test.txt` | Java：基于反馈迭代修复 |
-| `prompts/cpp/generate_test.txt` | C++：占位模板（未实现） |
-| `prompts/cpp/fix_test.txt` | C++：占位模板（未实现） |
+| `prompts/cpp/generate_test.txt` | C++：首次生成 plain `assert` 测试 |
+| `prompts/cpp/fix_test.txt` | C++：基于编译/运行反馈迭代修复 |
 
 ---
 
@@ -41,7 +41,7 @@ src/testagent/generator/
 
 **位置**：`testagent/generator/test_generator.py`
 
-测试生成的主入口类，持有一个 `LLMClient` 实例并提供两个公开方法。
+测试生成的主入口类，持有一个 `LLMClient` 实例并提供两个公开方法。Java 生成结果会被规范化为 `<ClassName>Test`；C++ 生成结果保持模型输出的完整 translation unit，不做 Java 类名改写。
 
 #### 构造参数
 
@@ -86,6 +86,8 @@ print(result.test_code)
 # 迭代修复（传入上一轮结果）
 refined = generator.refine(context, result, test_result)  # iteration=2
 ```
+
+C++ prompt 要求模型输出一个完整 `.cpp` 文件，使用项目头文件、标准库和 `assert`，并包含 `int main()`。执行器会通过 Makefile 的 `testagent-test` 目标编译该文件。
 
 ---
 

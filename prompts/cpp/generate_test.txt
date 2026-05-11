@@ -1,5 +1,55 @@
-{# C++ test generation prompt — placeholder stub #}
-[C++ support is not yet implemented. This template is a placeholder.]
+You are generating a C++ unit test for a project that will be compiled by the
+project Makefile through the `testagent-test` target.
 
-Target method: {{ target.class_name }}::{{ target.method_name }}
-Signature: {{ target.method_signature }}
+## Target
+
+Class: {{ target.class_name }}
+Method: {{ target.method_name }}
+Qualified target: {{ target.class_name }}::{{ target.method_name }}
+Namespace: {{ package if package else "(global)" }}
+
+## Target Method Source
+
+```cpp
+{{ target.method_signature }}
+```
+
+## Target Class Declaration
+
+```cpp
+{{ target.class_source }}
+```
+
+{% if imports %}
+## Includes Seen In Target
+
+{% for import in imports -%}
+{{ import }}
+{% endfor %}
+{% endif %}
+{% if dependencies %}
+## Project Dependencies
+
+{% for dep in dependencies %}
+### {{ dep.kind }} {{ dep.qualified_name }} ({{ dep.file_path }})
+
+```cpp
+{{ dep.source }}
+```
+
+{% endfor %}
+{% endif %}
+
+## Requirements
+
+- Output exactly one COMPLETE C++ test source file.
+- Use `#include` directives for the project headers needed by the test.
+- Use only the C++ standard library and plain `assert`; do not require GoogleTest,
+  Catch2, Boost.Test, or other external test frameworks.
+- Include an `int main()` function that runs the assertions and returns 0.
+- Generate tests only for the target method. Do not test unrelated methods except
+  as setup needed to call the target.
+- Keep the test deterministic and CPU-only.
+- Do not modify production code or rely on network, files outside the project, or
+  environment-specific paths.
+- Put the final answer in a fenced `cpp` code block and do not include prose outside it.

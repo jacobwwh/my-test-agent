@@ -197,7 +197,8 @@ class TestGenerator:
                      context.target.class_name, context.target.method_name)
         raw_response = self._client.chat(messages)
         test_code = extract_code_block(raw_response)
-        test_code = normalize_test_class_name(test_code, context.target.class_name)
+        if self._language == "java":
+            test_code = normalize_test_class_name(test_code, context.target.class_name)
         return GeneratedTest(test_code=test_code, iteration=1)
 
     def refine(
@@ -235,7 +236,8 @@ class TestGenerator:
                      previous_test.iteration, previous_test.iteration + 1)
         raw_response = self._client.chat(messages)
         test_code = extract_code_block(raw_response)
-        test_code = normalize_test_class_name(test_code, context.target.class_name)
+        if self._language == "java":
+            test_code = normalize_test_class_name(test_code, context.target.class_name)
         return GeneratedTest(
             test_code=test_code,
             iteration=previous_test.iteration + 1,

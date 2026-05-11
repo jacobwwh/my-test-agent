@@ -68,3 +68,9 @@ def test_all_targets_fail_when_project_has_no_testable_methods():
         assert "No testable methods discovered" in str(exc)
     else:
         raise AssertionError("expected ValueError")
+
+
+def test_short_name_supports_cpp_namespaces():
+    script = _load_script()
+
+    assert script._short("shop::PricingService") == "PricingService"

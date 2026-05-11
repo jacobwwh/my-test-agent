@@ -1,6 +1,80 @@
-{# C++ test repair prompt — placeholder stub #}
-[C++ support is not yet implemented. This template is a placeholder.]
+The previous C++ test did not satisfy the executor. Repair it using the target
+context and execution feedback.
 
-Target method: {{ target.class_name }}::{{ target.method_name }}
-Previous test code:
+## Target
+
+Class: {{ target.class_name }}
+Method: {{ target.method_name }}
+Qualified target: {{ target.class_name }}::{{ target.method_name }}
+Namespace: {{ package if package else "(global)" }}
+
+## Target Method Source
+
+```cpp
+{{ target.method_signature }}
+```
+
+## Target Class Declaration
+
+```cpp
+{{ target.class_source }}
+```
+
+{% if dependencies %}
+## Project Dependencies
+
+{% for dep in dependencies %}
+### {{ dep.kind }} {{ dep.qualified_name }} ({{ dep.file_path }})
+
+```cpp
+{{ dep.source }}
+```
+
+{% endfor %}
+{% endif %}
+
+## Previous Test Code
+
+Iteration {{ previous_test.iteration }}
+
+```cpp
 {{ previous_test.test_code }}
+```
+
+## Execution Feedback
+
+{% if not test_result.compiled %}
+### Compilation Errors
+
+```text
+{{ test_result.compile_errors }}
+```
+{% elif not test_result.passed %}
+### Test Failures
+
+Failed tests: {{ test_result.failed_tests }}
+
+```text
+{{ test_result.test_output }}
+```
+{% elif test_result.coverage %}
+### Coverage Gaps
+
+Line coverage: {{ "%.1f"|format(test_result.coverage.line_coverage * 100) }}%
+Branch coverage: {{ "%.1f"|format(test_result.coverage.branch_coverage * 100) }}%
+Uncovered lines: {{ test_result.coverage.uncovered_lines }}
+Uncovered branches: {{ test_result.coverage.uncovered_branches }}
+{% else %}
+The test passed but still needs improvement requested by the pipeline.
+{% endif %}
+
+## Requirements
+
+- Output the COMPLETE fixed C++ test file.
+- Use `#include` directives for the project headers needed by the test.
+- Use only the C++ standard library and plain `assert`; do not require external
+  test frameworks.
+- Include an `int main()` function that runs the assertions and returns 0.
+- Fix the concrete compile/runtime/coverage issue shown above.
+- Keep tests scoped to {{ target.class_name }}::{{ target.method_name }}.
+- Put the final answer in a fenced `cpp` code block and do not include prose outside it.

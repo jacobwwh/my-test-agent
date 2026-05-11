@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "testagent"
 version = "0.1.0"
-description = "Automated unit test generation for Java methods using locally deployed LLMs"
+description = "Automated unit test generation for Java and C++ methods using locally deployed LLMs"
 requires-python = ">=3.10"
 dependencies = [
     "tree-sitter>=0.20",

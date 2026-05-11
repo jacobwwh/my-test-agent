@@ -1,6 +1,6 @@
 # Analyzer 模块文档
 
-`testagent.analyzer` 模块负责对源码进行静态分析，提取目标方法及其项目内依赖的上下文信息，为后续 LLM 生成测试用例提供输入。当前实现支持 Java；其他语言通过工厂函数扩展。
+`testagent.analyzer` 模块负责对源码进行静态分析，提取目标方法及其项目内依赖的上下文信息，为后续 LLM 生成测试用例提供输入。当前实现支持 Java 和 C++；其他语言通过工厂函数扩展。
 
 模块结构如下：
 
@@ -12,6 +12,8 @@
 | `analyzer/java/java_parser.py` | 基于 tree-sitter 的 Java AST 解析 |
 | `analyzer/java/dependency.py` | 依赖类型解析与源码提取 |
 | `analyzer/java/test_summary.py` | 对应真实项目测试文件的结构摘要 |
+| `analyzer/cpp/__init__.py` | C++ 实现：`CppAnalyzer` |
+| `analyzer/cpp/cpp_parser.py` | 轻量 C++ 解析、include 依赖解析与 public 方法发现 |
 
 ---
 
@@ -56,9 +58,32 @@ analyzer = create_analyzer("java", Path("/path/to/project"))
 
 | `language` 值 | 对应实现 |
 |--------------|---------|
+| `"cpp"` | `CppAnalyzer` |
 | `"java"` | `JavaAnalyzer` |
 
 传入不支持的语言时抛出 `ValueError`。
+
+---
+
+## C++ 实现：`CppAnalyzer`
+
+**所在模块**：`testagent.analyzer.cpp`（也可通过 `testagent.analyzer.CppAnalyzer` 导入）
+
+### `analyze(self, class_name: str, method_name: str) -> AnalysisContext`
+
+分析命名空间类方法，返回与 Java 分析器一致的数据模型。`class_name` 使用 C++ 作用域写法，例如 `"shop::PricingService"`。
+
+当前 C++ 分析器采用标准库实现的轻量解析策略：
+
+- 在 `include/`、`src/`、`source/`、`lib/` 中查找 `.h/.hpp/.cpp` 等源码文件
+- 定位 `class <Name>` 声明和 `Class::method(...)` 形式的 out-of-line 方法定义
+- 提取目标头文件和实现文件中的 `#include` 语句
+- 递归解析项目内双引号 include，并补充头文件对应的同名 `.cpp` 文件
+- 将 C++ namespace 写入 `AnalysisContext.package`
+
+### `list_testable_methods(self) -> list[tuple[str, str]]`
+
+扫描头文件中的 `public:` 区域，返回 `(qualified_class_name, method_name)` 形式的目标列表。构造函数、`operator` 和非 public 区域方法不会作为默认测试目标。
 
 ---
 

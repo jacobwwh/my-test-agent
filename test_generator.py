@@ -32,6 +32,7 @@ from testagent.generator.test_generator import TestGenerator
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 SAMPLE_PROJECT = PROJECT_ROOT / "under_test" / "sample-java-project"
+SAMPLE_CPP_PROJECT = PROJECT_ROOT.parent / "sample-cpp-project"
 OUTPUT_ROOT = PROJECT_ROOT / "generated_tests"
 
 # Method targets to test: (class_name, method_name)
@@ -44,6 +45,15 @@ DEFAULT_TARGETS = [
 ]
 
 PRESET_TARGETS = DEFAULT_TARGETS
+
+CPP_DEFAULT_TARGETS = [
+    ("shop::PricingService", "finalPrice"),
+]
+
+_DEFAULT_TARGETS_BY_LANGUAGE = {
+    "cpp": CPP_DEFAULT_TARGETS,
+    "java": DEFAULT_TARGETS,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -69,10 +79,34 @@ def _short_name(class_name: str) -> str:
         >>> _short_name("com.example.service.OrderService")
         'OrderService'
     """
-    return class_name.rsplit(".", 1)[-1]
+    return class_name.replace("::", ".").rsplit(".", 1)[-1]
 
 
-def _output_path(project_name: str, class_name: str, method_name: str) -> Path:
+def _default_targets_for_language(language: str) -> list[tuple[str, str]]:
+    """按语言返回内置生成目标。"""
+    return _DEFAULT_TARGETS_BY_LANGUAGE.get(language, DEFAULT_TARGETS)
+
+
+def _default_project_for_language(language: str) -> Path:
+    """按语言返回默认示例项目路径。"""
+    if language == "cpp":
+        return SAMPLE_CPP_PROJECT
+    return SAMPLE_PROJECT
+
+
+def _extension_for_language(language: str) -> str:
+    """按语言返回生成测试文件扩展名。"""
+    if language == "cpp":
+        return ".cpp"
+    return ".java"
+
+
+def _output_path(
+    project_name: str,
+    class_name: str,
+    method_name: str,
+    language: str = "java",
+) -> Path:
     """构造生成测试的输出路径。
 
     功能简介：
@@ -96,7 +130,7 @@ def _output_path(project_name: str, class_name: str, method_name: str) -> Path:
         Path('generated_tests/sample-java-project/Calculator_add_Test.java')
     """
     simple_class = _short_name(class_name)
-    filename = f"{simple_class}_{method_name}_Test.java"
+    filename = f"{simple_class}_{method_name}_Test{_extension_for_language(language)}"
     return OUTPUT_ROOT / project_name / filename
 
 
@@ -219,7 +253,7 @@ def run_one(
     print(f"  Generated code length: {len(result.test_code)} chars")
 
     # --- Save ---
-    out_path = _output_path(project_name, class_name, method_name)
+    out_path = _output_path(project_name, class_name, method_name, generator._language)
     _save_test(out_path, result.test_code)
 
     # --- Preview ---
@@ -305,14 +339,6 @@ def main() -> None:
     """
     args = parse_args()
 
-    # --- List mode ---
-    if args.list:
-        print("Preset targets:")
-        for cls, method in PRESET_TARGETS:
-            print(f"  {_short_name(cls)}.{method}  ({cls})")
-        print("\nFor arbitrary projects, use --class <fully.qualified.Class> --method <methodName>.")
-        return
-
     # --- Config ---
     overrides = {k: v for k, v in {
         "model": args.model,
@@ -320,8 +346,18 @@ def main() -> None:
         "language": args.language,
     }.items() if v is not None}
     config = load_config(**overrides)
-    project_path = resolve_project_path(args.project, config.project_path, SAMPLE_PROJECT)
+    default_project = _default_project_for_language(config.language)
+    project_path = resolve_project_path(args.project, config.project_path, default_project)
     project_name = project_path.name
+
+    # --- List mode ---
+    preset_targets = _default_targets_for_language(config.language)
+    if args.list:
+        print("Preset targets:")
+        for cls, method in preset_targets:
+            print(f"  {_short_name(cls)}.{method}  ({cls})")
+        print("\nFor arbitrary projects, use --class <qualified.Class> --method <methodName>.")
+        return
 
     # --- Resolve targets ---
     try:
@@ -329,7 +365,7 @@ def main() -> None:
             target=args.target,
             class_name=args.class_name,
             method_name=args.method_name,
-            default_targets=PRESET_TARGETS,
+            default_targets=preset_targets,
             short_name=_short_name,
         )
     except ValueError as exc:

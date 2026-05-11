@@ -1,6 +1,6 @@
 # my-test-agent
 
-基于本地部署 LLM（使用 OpenAI API 调用）的多语言单元测试自动生成框架。当前支持 Java（通过分析源码生成 JUnit 5 测试用例，经 Maven/Gradle 编译执行并收集 JaCoCo 覆盖率，根据编译错误、测试失败和覆盖率缺口迭代优化），并通过 `--language` 参数预留了对 C++ 等其他语言的扩展接口。
+基于本地部署 LLM（使用 OpenAI API 调用）的多语言单元测试自动生成框架。当前支持 Java（通过分析源码生成 JUnit 5 测试用例，经 Maven/Gradle 编译执行并收集 JaCoCo 覆盖率，根据编译错误、测试失败和覆盖率缺口迭代优化）和 C++（分析命名空间类、双引号 include 依赖和同名 `.cpp` 实现，经 Makefile 编译执行 plain `assert` 测试，并根据执行反馈迭代修复）。
 
 ## 配置
 
@@ -17,7 +17,7 @@ llm:
 
 project:
   path: ""                               # 被测项目根目录；留空则使用内置 sample 项目
-  language: "java"                       # 目标语言：java（后续支持 cpp 等）
+  language: "java"                       # 目标语言：java 或 cpp
 
 pipeline:
   max_iterations: 5                      # 最大迭代优化次数
@@ -42,7 +42,7 @@ export YUNWU_API_KEY="your-api-key"
 
 1. CLI 参数 `--project`
 2. 配置文件 `project.path`
-3. 默认示例项目 `under_test/sample-java-project`
+3. 默认示例项目：Java 使用 `under_test/sample-java-project`，C++ 使用工作目录上级的 `../sample-cpp-project`
 
 语言优先级如下：
 
@@ -68,7 +68,7 @@ project:
 | `--class` | 指定任意目标的全限定类名，例如 `com.example.Calculator` |
 | `--method` | 与 `--class` 搭配，指定目标方法名 |
 | `--all` / `-all` | 使用 analyzer 自动发现被测项目中所有可测试方法，并覆盖默认目标列表 |
-| `--language` | 目标语言（默认 `java`，后续支持 `cpp` 等） |
+| `--language` | 目标语言（默认 `java`，支持 `cpp`） |
 | `--model` | 覆盖 LLM 模型名称 |
 | `--max-iterations` | 覆盖最大迭代次数 |
 | `--keep-test` | Executor API 兼容参数；完整 `test_executor.py` 流水线始终保留合并后的真实项目测试文件 |
@@ -113,16 +113,19 @@ python test_generator.py --project /path/to/java-project --class com.acme.OrderS
 # 使用指定模型
 python test_generator.py --target Calculator.divide --model gpt-4o
 
-# 指定目标语言（当前仅支持 java）
+# 指定目标语言
 python test_generator.py --language java --target Calculator.add
+python test_generator.py --language cpp --target PricingService.finalPrice
 ```
 
 ### test_executor.py — 完整流水线（生成 + 执行 + 迭代优化）
 
-执行 **Analyzer -> Generator -> Executor** 完整流程：生成测试 -> 写入真实项目测试文件 -> 编译执行 -> 收集覆盖率 -> 根据错误和覆盖率缺口迭代优化，直到测试通过且覆盖率达标或达到最大迭代次数。需要配置 API Key 和本地 Maven/Gradle 环境。
+执行 **Analyzer -> Generator -> Executor** 完整流程：生成测试 -> 写入真实项目测试文件 -> 编译执行 -> 收集覆盖率或执行反馈 -> 根据错误和覆盖率缺口迭代优化，直到测试通过且覆盖率达标或达到最大迭代次数。Java 需要配置 API Key 和本地 Maven/Gradle 环境；C++ 需要配置 API Key、本地 `make`/`g++`，且被测项目 Makefile 提供 `testagent-test` 目标。
 
 Java 测试会合并到真实项目中与被测类对应的测试文件：
 `src/test/java/<package>/<ClassName>Test.java`。若文件不存在则新建；若已存在则追加/替换当前被测方法对应的 `testagent` marker block。不同被测方法的测试位于各自独立 block 中，import、字段、helper 等共享代码会尽量复用并去重。完整 `test_executor.py` 流水线始终保留这些合并后的项目测试文件，`--keep-test` 仅作为兼容参数保留。
+
+C++ 测试会写入被测项目的 `tests/testagent/generated/<Class>_<method>_iter<N>.cpp`，由项目 Makefile 的 `testagent-test` 目标通过 `TEST_FILE`、`TEST_BINARY` 和 `REPORT_DIR` 参数编译执行。当前 C++ 路径不解析覆盖率，测试通过后即认为覆盖率门禁不阻塞。
 
 ```bash
 # 列出可用目标
@@ -151,6 +154,10 @@ python test_executor.py --project /path/to/java-project --class com.acme.OrderSe
 
 # 指定目标语言
 python test_executor.py --language java --target Calculator.add
+python test_executor.py --language cpp --target PricingService.finalPrice --min-branch-coverage 0.0
+
+# 不调用 LLM 的 C++ 修复闭环演示：首轮故意编译失败，第二轮根据反馈修复并通过
+python scripts/run_cpp_feedback_demo.py --project ../sample-cpp-project
 ```
 
 ### test_repair.py — 修复已有失败测试
@@ -188,12 +195,14 @@ python test_repair.py --language java --file CalculatorTest_failing.java
 | `OrderService.process` | `com.example.service.OrderService` |
 | `OrderService.findOrder` | `com.example.service.OrderService` |
 | `OrderService.calculateTotal` | `com.example.service.OrderService` |
+| `PricingService.finalPrice` | `shop::PricingService`（C++，默认项目 `../sample-cpp-project`） |
 
 ## 环境要求
 
 - Python 3.10+（与 `pyproject.toml` 中 `requires-python = ">=3.10"` 一致）
 - Java 11+（被测项目编译执行）
 - Maven 或 Gradle（构建工具）
+- C++17 编译器和 `make`（C++ 被测项目编译执行）
 - LLM API 访问（OpenAI API 兼容端点）
 
 ### Python 运行时依赖

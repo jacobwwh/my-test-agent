@@ -13,7 +13,7 @@ def create_analyzer(language: str, project_path: Path) -> BaseAnalyzer:
 
     功能简介：
         根据指定语言从注册表中查找对应的分析器类，实例化后返回。
-        当前仅支持 `java`；其他语言会抛出 `ValueError`。
+        当前支持 `java` 和 `cpp`；其他语言会抛出 `ValueError`。
 
     输入参数：
         language:
@@ -34,9 +34,11 @@ def create_analyzer(language: str, project_path: Path) -> BaseAnalyzer:
         ValueError:
             当指定语言不在支持列表中时抛出。
     """
+    from testagent.analyzer.cpp import CppAnalyzer
     from testagent.analyzer.java import JavaAnalyzer
 
     registry: dict[str, type[BaseAnalyzer]] = {
+        "cpp": CppAnalyzer,
         "java": JavaAnalyzer,
     }
     cls = registry.get(language)
@@ -49,4 +51,5 @@ def create_analyzer(language: str, project_path: Path) -> BaseAnalyzer:
 
 # Backward-compatibility re-export: existing code using
 # ``from testagent.analyzer import JavaAnalyzer`` continues to work.
+from testagent.analyzer.cpp import CppAnalyzer  # noqa: E402
 from testagent.analyzer.java import JavaAnalyzer  # noqa: E402

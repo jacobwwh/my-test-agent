@@ -37,6 +37,7 @@ from testagent.models import AnalysisContext, GeneratedTest, TestResult
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 SAMPLE_PROJECT = PROJECT_ROOT / "under_test" / "sample-java-project"
+SAMPLE_CPP_PROJECT = PROJECT_ROOT.parent / "sample-cpp-project"
 SAMPLE_PROJECT_OUT = "../sample-java-project"  #A sample project outside the testagent project
 REPORTS_ROOT = PROJECT_ROOT / "tmp" / "reports"
 
@@ -50,8 +51,33 @@ DEFAULT_TARGETS = [
 
 PRESET_TARGETS = DEFAULT_TARGETS
 
+CPP_DEFAULT_TARGETS = [
+    ("shop::PricingService", "finalPrice"),
+]
 
-def _targets_for_all_flag(all_targets: bool, analyzer) -> list[tuple[str, str]]:
+_DEFAULT_TARGETS_BY_LANGUAGE = {
+    "cpp": CPP_DEFAULT_TARGETS,
+    "java": DEFAULT_TARGETS,
+}
+
+
+def _default_targets_for_language(language: str) -> list[tuple[str, str]]:
+    """按语言返回内置目标列表。"""
+    return _DEFAULT_TARGETS_BY_LANGUAGE.get(language, DEFAULT_TARGETS)
+
+
+def _default_project_for_language(language: str) -> Path:
+    """按语言返回默认示例项目路径。"""
+    if language == "cpp":
+        return SAMPLE_CPP_PROJECT
+    return SAMPLE_PROJECT
+
+
+def _targets_for_all_flag(
+    all_targets: bool,
+    analyzer,
+    default_targets: list[tuple[str, str]] | None = None,
+) -> list[tuple[str, str]]:
     """根据 `--all` 参数选择默认目标列表。
 
     功能简介：
@@ -73,7 +99,7 @@ def _targets_for_all_flag(all_targets: bool, analyzer) -> list[tuple[str, str]]:
             当当前语言分析器不支持自动发现，或项目中没有发现可测方法时抛出。
     """
     if not all_targets:
-        return DEFAULT_TARGETS
+        return default_targets if default_targets is not None else DEFAULT_TARGETS
 
     discover = getattr(analyzer, "list_testable_methods", None)
     if discover is None:
@@ -136,7 +162,7 @@ def _short(class_name: str) -> str:
         >>> _short("com.example.Calculator")
         'Calculator'
     """
-    return class_name.rsplit(".", 1)[-1]
+    return class_name.replace("::", ".").rsplit(".", 1)[-1]
 
 
 def _print_context(ctx: AnalysisContext) -> None:
@@ -590,15 +616,6 @@ def main() -> None:
     """
     args = parse_args()
 
-    # ── List mode ───────────────────────────────────────────────────
-    if args.list and not args.all_targets:
-        print("Preset targets:")
-        for cls, method in PRESET_TARGETS:
-            print(f"  {_short(cls)}.{method:<20}  ({cls})")
-        print("\nFor arbitrary projects, use --class <fully.qualified.Class> --method <methodName>.")
-        print("Use --all --list to discover testable methods from the project source tree.")
-        return
-
     # ── Config ──────────────────────────────────────────────────────
     overrides = {k: v for k, v in {
         "model": args.model,
@@ -609,11 +626,27 @@ def main() -> None:
         "language": args.language,
     }.items() if v is not None}
     config = load_config(**overrides)
-    project_path = resolve_project_path(args.project, config.project_path, SAMPLE_PROJECT)
+    default_project = _default_project_for_language(config.language)
+    project_path = resolve_project_path(args.project, config.project_path, default_project)
+
+    # ── List mode ───────────────────────────────────────────────────
+    language_default_targets = _default_targets_for_language(config.language)
+    if args.list and not args.all_targets:
+        print("Preset targets:")
+        for cls, method in language_default_targets:
+            print(f"  {_short(cls)}.{method:<20}  ({cls})")
+        print("\nFor arbitrary projects, use --class <qualified.Class> --method <methodName>.")
+        print("Use --all --list to discover testable methods from the project source tree.")
+        return
+
     analyzer = create_analyzer(config.language, project_path)
 
     try:
-        default_targets = _targets_for_all_flag(args.all_targets, analyzer)
+        default_targets = _targets_for_all_flag(
+            args.all_targets,
+            analyzer,
+            language_default_targets,
+        )
     except ValueError as exc:
         print(f"Error: {exc}")
         sys.exit(1)
@@ -622,7 +655,7 @@ def main() -> None:
         print("Discovered targets:" if args.all_targets else "Preset targets:")
         for cls, method in default_targets:
             print(f"  {_short(cls)}.{method:<20}  ({cls})")
-        print("\nFor arbitrary projects, use --class <fully.qualified.Class> --method <methodName>.")
+        print("\nFor arbitrary projects, use --class <qualified.Class> --method <methodName>.")
         return
 
     # ── Resolve targets ─────────────────────────────────────────────
@@ -682,14 +715,14 @@ def main() -> None:
             min_branch_coverage=config.min_branch_coverage,
         )
         results.append((target, ok))
-        successful_targets = [result_target for result_target, passed in results if passed]
-        invalid_targets = _validate_test_collection(project_path, successful_targets)
-        if invalid_targets:
-            invalid_set = set(invalid_targets)
-            for idx, (result_target, passed) in enumerate(results):
-                if passed and result_target in invalid_set:
-                    results[idx] = (result_target, False)
+        if config.language == "java":
             successful_targets = [result_target for result_target, passed in results if passed]
+            invalid_targets = _validate_test_collection(project_path, successful_targets)
+            if invalid_targets:
+                invalid_set = set(invalid_targets)
+                for idx, (result_target, passed) in enumerate(results):
+                    if passed and result_target in invalid_set:
+                        results[idx] = (result_target, False)
 
     # ── Summary ─────────────────────────────────────────────────────
     print(f"\n{_sep()}")

@@ -13,7 +13,7 @@ def create_executor(language: str, project_path: Path, **kwargs) -> BaseExecutor
 
     功能简介：
         根据指定语言从注册表中查找对应的执行器类，实例化后返回。
-        当前仅支持 `java`；其他语言会抛出 `ValueError`。
+        当前支持 `java` 和 `cpp`；其他语言会抛出 `ValueError`。
 
     输入参数：
         language:
@@ -38,9 +38,11 @@ def create_executor(language: str, project_path: Path, **kwargs) -> BaseExecutor
         ValueError:
             当指定语言不在支持列表中时抛出。
     """
+    from testagent.executor.cpp import CppTestExecutor
     from testagent.executor.java import JavaTestExecutor
 
     registry: dict[str, type[BaseExecutor]] = {
+        "cpp": CppTestExecutor,
         "java": JavaTestExecutor,
     }
     cls = registry.get(language)
