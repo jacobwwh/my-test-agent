@@ -13,6 +13,12 @@ from testagent.executor.cpp.builder import (
     run_build,
     write_test_file,
 )
+from testagent.executor.cpp.coverage import (
+    build_gcovr_command,
+    find_gcovr_xml,
+    parse_gcovr_xml,
+    run_gcovr,
+)
 from testagent.executor.cpp.runner import parse_make_result
 from testagent.models import AnalysisContext, GeneratedTest, TestResult
 
@@ -74,6 +80,9 @@ class CppTestExecutor(BaseExecutor):
             / f"iter{test.iteration}"
         )
         report_dir.mkdir(parents=True, exist_ok=True)
+        stale_xml = report_dir / "coverage.xml"
+        if stale_xml.is_file():
+            stale_xml.unlink()
         command = build_make_command(self.project_path, test_file, report_dir)
 
         try:
@@ -94,12 +103,47 @@ class CppTestExecutor(BaseExecutor):
                 )
 
             parsed = parse_make_result(returncode, output)
+            coverage = None
+            if parsed["compiled"]:
+                gcovr_xml = report_dir / "coverage.xml"
+                gcovr_command = build_gcovr_command(
+                    self.project_path,
+                    report_dir,
+                    gcovr_xml,
+                )
+                try:
+                    gcovr_returncode, gcovr_output = run_gcovr(
+                        self.project_path,
+                        gcovr_command,
+                        timeout=self.build_timeout,
+                    )
+                    if gcovr_returncode != 0:
+                        logger.warning(
+                            "gcovr failed with exit code %s: %s",
+                            gcovr_returncode,
+                            gcovr_output,
+                        )
+                except Exception as exc:
+                    logger.warning("gcovr process failed: %s", exc)
+
+                xml_path = find_gcovr_xml(report_dir, self.project_path)
+                if xml_path:
+                    coverage = parse_gcovr_xml(
+                        xml_path,
+                        context.target.file_path,
+                        context.target.method_name,
+                    )
+                else:
+                    logger.warning(
+                        "No gcovr XML found in %s; coverage will be unavailable.",
+                        report_dir,
+                    )
             return TestResult(
                 compiled=parsed["compiled"],
                 compile_errors=parsed["compile_errors"],
                 passed=parsed["passed"],
                 test_output=parsed["test_output"],
-                coverage=None,
+                coverage=coverage,
                 failed_tests=parsed["failed_tests"],
             )
         finally:

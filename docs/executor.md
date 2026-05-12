@@ -2,7 +2,7 @@
 
 ## 概述
 
-测试执行模块（`testagent.executor`）负责将 Generator 生成的测试代码写入目标项目，通过构建工具编译并运行测试，解析构建输出，最后读取覆盖率报告或执行反馈——将这些结果封装为 `TestResult` 返回给上层的迭代精炼循环。当前实现支持 Java（Maven/Gradle + JaCoCo）和 C++（Makefile + plain `assert`）。
+测试执行模块（`testagent.executor`）负责将 Generator 生成的测试代码写入目标项目，通过构建工具编译并运行测试，解析构建输出，最后读取覆盖率报告或执行反馈——将这些结果封装为 `TestResult` 返回给上层的迭代精炼循环。当前实现支持 Java（Maven/Gradle + JaCoCo）和 C++（Makefile + plain `assert` + gcovr）。
 
 模块结构如下：
 
@@ -17,6 +17,7 @@
 | `executor/cpp/__init__.py` | C++ 实现：`CppTestExecutor` |
 | `executor/cpp/builder.py` | Makefile 检测、生成测试文件写入、命令构造与执行 |
 | `executor/cpp/runner.py` | 纯函数：解析 C++ 编译/运行输出 |
+| `executor/cpp/coverage.py` | 解析 gcovr Cobertura XML 报告，提取覆盖率数据 |
 
 ---
 
@@ -26,6 +27,11 @@
 src/testagent/executor/
 ├── __init__.py          # 工厂函数 create_executor()，向后兼容导出 TestExecutor
 ├── base.py              # 抽象基类 BaseExecutor
+├── cpp/
+│   ├── __init__.py      # CppTestExecutor
+│   ├── builder.py       # Makefile 检测、测试文件写入、命令执行
+│   ├── runner.py        # C++ 输出解析（纯函数）
+│   └── coverage.py      # gcovr Cobertura XML 解析
 └── java/
     ├── __init__.py      # JavaTestExecutor（别名 TestExecutor）
     ├── builder.py       # 构建工具检测、文件注入、命令执行
@@ -67,6 +73,7 @@ C++ 执行器要求被测项目根目录存在 `Makefile`，并提供名为 `tes
 | `TEST_FILE` | 本轮生成的 C++ 测试源文件路径 |
 | `TEST_BINARY` | 期望输出的测试二进制路径 |
 | `REPORT_DIR` | 本轮执行报告目录 |
+| `CXX` | executor 注入带 `--coverage` 的 C++ 编译器命令 |
 
 生成测试文件写入：
 
@@ -74,7 +81,7 @@ C++ 执行器要求被测项目根目录存在 `Makefile`，并提供名为 `tes
 tests/testagent/generated/<Class>_<method>_iter<N>.cpp
 ```
 
-当前 C++ 路径不合并人工测试文件，也不解析覆盖率报告；如果编译成功且测试二进制退出码为 0，则 `TestResult.passed=True`。编译器/链接器输出中的 `error:`、`undefined reference` 等会进入 `compile_errors`，供 Generator 的 `refine()` 轮次修复。
+当前 C++ 路径不合并人工测试文件。编译成功且测试二进制退出码为 0 时 `TestResult.passed=True`；编译器/链接器输出中的 `error:`、`undefined reference` 等会进入 `compile_errors`，供 Generator 的 `refine()` 轮次修复。构建成功后，执行器会以被测项目目录为工作目录运行 gcovr，并通过 `--object-directory <REPORT_DIR>` 搜索外部报告目录中的 `.gcno/.gcda` 文件，生成并解析 `REPORT_DIR/coverage.xml`。未生成 XML 时 `coverage=None`，不影响编译/测试结果。
 
 Makefile 最小目标示例：
 
@@ -512,7 +519,7 @@ tmp/reports/
 | `compile_errors` | `str` | 编译错误文本（编译成功时为空字符串） |
 | `passed` | `bool` | 所有测试方法是否通过 |
 | `test_output` | `str` | 完整构建输出（stdout + stderr） |
-| `coverage` | `CoverageReport \| None` | 覆盖率报告，无 JaCoCo XML 时为 `None` |
+| `coverage` | `CoverageReport \| None` | 覆盖率报告；Java 无 JaCoCo XML 或 C++ 无 gcovr XML 时为 `None` |
 | `failed_tests` | `list[str]` | 失败的测试方法名列表 |
 
 **`CoverageReport`**
@@ -556,6 +563,7 @@ executor:
 | 编译错误（Maven/Gradle 输出中检测到） | `compiled=False`，`compile_errors` 包含相关错误行 |
 | 测试失败（编译通过但测试不通过） | `compiled=True`，`passed=False`，`failed_tests` 列出失败方法名 |
 | JaCoCo XML 不存在或解析失败 | `coverage=None`，记录 warning 日志，不影响其他字段 |
+| gcovr XML 不存在或解析失败 | `coverage=None`，记录 warning 日志，不影响其他字段 |
 
 ---
 

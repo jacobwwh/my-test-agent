@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -94,12 +95,14 @@ def build_make_command(project_path: Path, test_file: Path, report_dir: Path) ->
     resolved_test_file = test_file.resolve()
     resolved_report_dir = report_dir.resolve()
     binary = resolved_report_dir / "test_binary"
+    cxx = os.environ.get("CXX", "c++")
     return [
         "make",
         "testagent-test",
         f"TEST_FILE={resolved_test_file}",
         f"TEST_BINARY={binary}",
         f"REPORT_DIR={resolved_report_dir}",
+        f"CXX={cxx} --coverage",
     ]
 
 

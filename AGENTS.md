@@ -167,6 +167,36 @@ When possible:
 
 ---
 
+### Rule 9: Run full pipeline tests for completed language modules
+
+When you implement or modify a module for a target language, and the current
+language’s analyzer, generator, executor, feedback/repair loop, and coverage
+support are all implemented enough to run end to end, you must run a full
+pipeline test before declaring the work complete.
+
+The full pipeline test should cover:
+- program analysis
+- LLM test-case generation
+- test execution
+- iterative repair/refinement based on execution feedback
+
+Preferred entrypoint:
+- `python test_executor.py ...`
+
+If the full pipeline exposes failures, investigate and fix them using evidence
+from logs, reports, generated tests, and execution artifacts before concluding
+the task.
+
+If the full pipeline requires an LLM endpoint, remote service, or network access
+that is unavailable or unsafe to call from the current environment:
+- do not pretend the full pipeline was run
+- clearly state what blocked the full run
+- run the closest CPU-only deterministic or mocked full-flow test available
+- provide the exact command that should be run by the developer in the approved
+  environment
+
+---
+
 ## Required workflow for GPU-related tasks
 
 When a task involves GPU functionality, follow this workflow strictly:

@@ -1,6 +1,6 @@
 # my-test-agent
 
-基于本地部署 LLM（使用 OpenAI API 调用）的多语言单元测试自动生成框架。当前支持 Java（通过分析源码生成 JUnit 5 测试用例，经 Maven/Gradle 编译执行并收集 JaCoCo 覆盖率，根据编译错误、测试失败和覆盖率缺口迭代优化）和 C++（分析命名空间类、双引号 include 依赖和同名 `.cpp` 实现，经 Makefile 编译执行 plain `assert` 测试，并根据执行反馈迭代修复）。
+基于本地部署 LLM（使用 OpenAI API 调用）的多语言单元测试自动生成框架。当前支持 Java（通过分析源码生成 JUnit 5 测试用例，经 Maven/Gradle 编译执行并收集 JaCoCo 覆盖率，根据编译错误、测试失败和覆盖率缺口迭代优化）和 C++（分析命名空间类、双引号 include 依赖和同名 `.cpp` 实现，经 Makefile 编译执行 plain `assert` 测试，并通过 gcovr 收集覆盖率）。
 
 ## 配置
 
@@ -75,7 +75,7 @@ project:
 | `--keep-test` | Executor API 兼容参数；完整 `test_executor.py` 流水线始终保留合并后的真实项目测试文件 |
 | `--min-branch-coverage` | 覆盖目标分支覆盖率（0.0–1.0） |
 | `--project` | 指定被测项目路径 |
-| `--reports-dir` | 指定 JaCoCo 报告输出目录 |
+| `--reports-dir` | 指定覆盖率报告输出目录 |
 
 ## 脚本说明与使用
 
@@ -121,12 +121,12 @@ python test_generator.py --language cpp --target PricingService.finalPrice
 
 ### test_executor.py — 完整流水线（生成 + 执行 + 迭代优化）
 
-执行 **Analyzer -> Generator -> Executor** 完整流程：生成测试 -> 写入真实项目测试文件 -> 编译执行 -> 收集覆盖率或执行反馈 -> 根据错误和覆盖率缺口迭代优化，直到测试通过且覆盖率达标或达到最大迭代次数。Java 需要配置 API Key 和本地 Maven/Gradle 环境；C++ 需要配置 API Key、本地 `make`/`g++`，且被测项目 Makefile 提供 `testagent-test` 目标。
+执行 **Analyzer -> Generator -> Executor** 完整流程：生成测试 -> 写入真实项目测试文件 -> 编译执行 -> 收集覆盖率或执行反馈 -> 根据错误和覆盖率缺口迭代优化，直到测试通过且覆盖率达标或达到最大迭代次数。Java 需要配置 API Key 和本地 Maven/Gradle 环境；C++ 需要配置 API Key、本地 `make`/`g++`/`gcovr`，且被测项目 Makefile 提供 `testagent-test` 目标。
 
 Java 测试会合并到真实项目中与被测类对应的测试文件：
 `src/test/java/<package>/<ClassName>Test.java`。若文件不存在则新建；若已存在则追加/替换当前被测方法对应的 `testagent` marker block。不同被测方法的测试位于各自独立 block 中，import、字段、helper 等共享代码会尽量复用并去重。完整 `test_executor.py` 流水线始终保留这些合并后的项目测试文件，`--keep-test` 仅作为兼容参数保留。
 
-C++ 测试会写入被测项目的 `tests/testagent/generated/<Class>_<method>_iter<N>.cpp`，由项目 Makefile 的 `testagent-test` 目标通过 `TEST_FILE`、`TEST_BINARY` 和 `REPORT_DIR` 参数编译执行。当前 C++ 路径不解析覆盖率，测试通过后即认为覆盖率门禁不阻塞。
+C++ 测试会写入被测项目的 `tests/testagent/generated/<Class>_<method>_iter<N>.cpp`，由项目 Makefile 的 `testagent-test` 目标通过 `TEST_FILE`、`TEST_BINARY`、`REPORT_DIR` 和带 `--coverage` 的 `CXX` 参数编译执行。Executor 会在构建成功后调用 `gcovr --object-directory <REPORT_DIR>` 生成 `REPORT_DIR/coverage.xml`，再解析该文件并填充 `CoverageReport`。若目标项目无法生成 gcovr XML，则覆盖率仍显示为不可用且不阻塞执行结果。
 
 ```bash
 # 列出可用目标
@@ -218,6 +218,7 @@ python test_repair.py --language java --file CalculatorTest_failing.java
 | `click` | `>=8.0` | CLI 支持 |
 | `PyYAML` | `>=6.0` | 读取 YAML 配置 |
 | `Jinja2` | `>=3.0` | 生成 Prompt 模板 |
+| `gcovr` | `>=8.0` | 解析 C++ gcov 覆盖率并生成 Cobertura XML |
 
 ### Python 开发/测试依赖
 

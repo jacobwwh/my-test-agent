@@ -18,6 +18,7 @@ from testagent.executor.cpp.builder import (
 from testagent.executor.cpp.runner import parse_make_result
 from testagent.models import AnalysisContext, GeneratedTest, TargetMethod
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 CPP_TEST_CODE = """\
 #include "shop/pricing_service.h"
@@ -97,6 +98,16 @@ def test_build_make_command_targets_testagent_make_rule(tmp_path: Path):
     assert f"TEST_FILE={test_file}" in command
     assert any(arg.startswith("TEST_BINARY=") for arg in command)
     assert f"REPORT_DIR={report_dir}" in command
+    assert any(arg.startswith("CXX=") and "--coverage" in arg for arg in command)
+
+
+def test_sample_cpp_makefile_does_not_own_gcovr_coverage_generation():
+    content = (PROJECT_ROOT / "under_test" / "sample-cpp-project" / "Makefile").read_text(
+        encoding="utf-8",
+    )
+
+    assert "gcovr" not in content
+    assert "coverage.xml" not in content
 
 
 def test_parse_make_result_for_compile_error():
@@ -140,6 +151,101 @@ def test_cpp_executor_runs_make_and_keeps_generated_test(mock_run, tmp_path: Pat
     assert test_file.is_file()
     command = mock_run.call_args[0][1]
     assert "testagent-test" in command
+
+
+def test_cpp_executor_reads_gcovr_coverage_when_xml_exists(tmp_path: Path):
+    (tmp_path / "Makefile").touch()
+    source_file = tmp_path / "src" / "pricing_service.cpp"
+    source_file.parent.mkdir()
+    source_file.write_text("double finalPrice() { return 0.0; }\n", encoding="utf-8")
+
+    def fake_run_build(project_path, command, timeout=300):
+        del project_path, timeout
+        report_arg = next(arg for arg in command if arg.startswith("REPORT_DIR="))
+        report_dir = Path(report_arg.split("=", 1)[1])
+        report_dir.mkdir(parents=True, exist_ok=True)
+        (report_dir / "coverage.xml").write_text(
+            """\
+<coverage line-rate="1.0" branch-rate="1.0">
+  <packages>
+    <package name="shop">
+      <classes>
+        <class name="pricing_service_cpp" filename="src/pricing_service.cpp"
+               line-rate="1.0" branch-rate="1.0">
+          <lines>
+            <line number="1" hits="1" branch="false"/>
+          </lines>
+        </class>
+      </classes>
+    </package>
+  </packages>
+</coverage>
+""",
+            encoding="utf-8",
+        )
+        return 0, ""
+
+    executor = create_executor("cpp", tmp_path, reports_dir=tmp_path / "reports", keep_test=True)
+    context = _context()
+    context.target.file_path = source_file
+
+    with (
+        patch("testagent.executor.cpp.run_build", side_effect=fake_run_build),
+        patch("testagent.executor.cpp.run_gcovr", return_value=(0, "gcovr ok")),
+    ):
+        result = executor.execute(GeneratedTest(CPP_TEST_CODE, iteration=1), context)
+
+    assert result.compiled is True
+    assert result.coverage is not None
+    assert result.coverage.line_coverage == pytest.approx(1.0)
+    assert result.coverage.branch_coverage == pytest.approx(1.0)
+
+
+@patch("testagent.executor.cpp.run_build", return_value=(0, ""))
+def test_cpp_executor_generates_gcovr_xml_after_successful_build(mock_run, tmp_path: Path):
+    (tmp_path / "Makefile").touch()
+    source_file = tmp_path / "src" / "pricing_service.cpp"
+    source_file.parent.mkdir()
+    source_file.write_text("double finalPrice() { return 0.0; }\n", encoding="utf-8")
+
+    def fake_run_gcovr(project_path, command, timeout=300):
+        del project_path, timeout
+        output_path = Path(command[command.index("--output") + 1])
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(
+            """\
+<coverage line-rate="1.0" branch-rate="1.0">
+  <packages>
+    <package name="shop">
+      <classes>
+        <class name="pricing_service_cpp" filename="src/pricing_service.cpp"
+               line-rate="1.0" branch-rate="1.0">
+          <lines>
+            <line number="1" hits="1" branch="false"/>
+          </lines>
+        </class>
+      </classes>
+    </package>
+  </packages>
+</coverage>
+""",
+            encoding="utf-8",
+        )
+        return 0, "gcovr ok"
+
+    executor = create_executor("cpp", tmp_path, reports_dir=tmp_path / "reports", keep_test=True)
+    context = _context()
+    context.target.file_path = source_file
+
+    with patch("testagent.executor.cpp.run_gcovr", side_effect=fake_run_gcovr) as mock_gcovr:
+        result = executor.execute(GeneratedTest(CPP_TEST_CODE, iteration=1), context)
+
+    assert result.compiled is True
+    assert result.coverage is not None
+    command = mock_gcovr.call_args[0][1]
+    assert "--object-directory" in command
+    assert str((tmp_path / "reports" / "shop_PricingService" / "finalPrice" / "iter1").resolve()) in command
+    assert "src/.*" not in command
 
 
 @patch("testagent.executor.cpp.run_build", return_value=(0, ""))
