@@ -27,6 +27,7 @@ import sys
 import time
 from pathlib import Path
 
+from check_lang import normalize_language, resolve_language
 from testagent.analyzer import create_analyzer
 from testagent.cli_utils import resolve_project_path
 from testagent.config import load_config
@@ -40,6 +41,7 @@ from testagent.models import AnalysisContext, GeneratedTest, TestResult
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 SAMPLE_PROJECT = PROJECT_ROOT / "under_test" / "sample-java-project"
+SAMPLE_CPP_PROJECT = PROJECT_ROOT / "under_test" / "sample-cpp-project"
 FAILED_TEST_DIR = PROJECT_ROOT / "failed_test_case"
 REPORTS_ROOT = PROJECT_ROOT / "tmp" / "reports"
 OUTPUT_ROOT = PROJECT_ROOT / "generated_tests"
@@ -53,6 +55,22 @@ _BANNER_ITER_RE = re.compile(r"\*\s+Iteration:\s+(\d+)")
 # ---------------------------------------------------------------------------
 # Banner parsing
 # ---------------------------------------------------------------------------
+
+def _default_project_for_language(language: str) -> Path:
+    """按语言返回默认示例项目路径。"""
+    if language == "cpp":
+        return SAMPLE_CPP_PROJECT
+    return SAMPLE_PROJECT
+
+
+def _resolve_pipeline_language(
+    cli_language: str | None,
+    config_language: str | None,
+    project_path: Path,
+) -> str:
+    """解析流水线最终使用的语言。"""
+    return resolve_language(cli_language, config_language, project_path)
+
 
 def _parse_banner(test_code: str) -> tuple[str, str, int] | None:
     """从测试文件头部注释中解析目标信息。
@@ -550,7 +568,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--language",
         default=None,
-        help="Target language (default: java)",
+        help="Target language (default: auto-detect from project)",
     )
     return p.parse_args()
 
@@ -612,7 +630,6 @@ def main() -> None:
         "max_iterations": args.max_iterations,
         "keep_test": args.keep_test,
         "min_branch_coverage": args.min_branch_coverage,
-        "language": args.language,
     }.items() if v is not None}
     config = load_config(**overrides)
 
@@ -621,7 +638,10 @@ def main() -> None:
         print("  Set YUNWU_API_KEY environment variable, or set llm.api_key in configs/default.yaml")
         sys.exit(1)
 
-    project_path = resolve_project_path(args.project, config.project_path, SAMPLE_PROJECT)
+    requested_language = normalize_language(args.language) or normalize_language(config.language) or "java"
+    default_project = _default_project_for_language(requested_language)
+    project_path = resolve_project_path(args.project, config.project_path, default_project)
+    config.language = _resolve_pipeline_language(args.language, config.language, project_path)
     project_name = project_path.name
 
     print(_sep())

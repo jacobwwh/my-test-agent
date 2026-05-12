@@ -74,3 +74,13 @@ def test_short_name_supports_cpp_namespaces():
     script = _load_script()
 
     assert script._short("shop::PricingService") == "PricingService"
+
+
+def test_resolve_pipeline_language_auto_detects_cpp_project(tmp_path):
+    script = _load_script()
+    (tmp_path / "CMakeLists.txt").write_text(
+        "cmake_minimum_required(VERSION 3.20)\n",
+        encoding="utf-8",
+    )
+
+    assert script._resolve_pipeline_language(None, "java", tmp_path) == "cpp"

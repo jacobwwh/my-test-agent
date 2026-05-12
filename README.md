@@ -47,8 +47,9 @@ export YUNWU_API_KEY="your-api-key"
 语言优先级如下：
 
 1. CLI 参数 `--language`
-2. 配置文件 `project.language`
-3. 默认值 `java`
+2. 根据最终被测项目路径自动识别（`check_lang.py`）
+3. 配置文件 `project.language`
+4. 默认值 `java`
 
 示例：
 
@@ -68,7 +69,7 @@ project:
 | `--class` | 指定任意目标的全限定类名，例如 `com.example.Calculator` |
 | `--method` | 与 `--class` 搭配，指定目标方法名 |
 | `--all` / `-all` | 使用 analyzer 自动发现被测项目中所有可测试方法，并覆盖默认目标列表 |
-| `--language` | 目标语言（默认 `java`，支持 `cpp`） |
+| `--language` | 目标语言（默认根据项目自动识别，支持 `java`、`cpp`/`c++`） |
 | `--model` | 覆盖 LLM 模型名称 |
 | `--max-iterations` | 覆盖最大迭代次数 |
 | `--keep-test` | Executor API 兼容参数；完整 `test_executor.py` 流水线始终保留合并后的真实项目测试文件 |

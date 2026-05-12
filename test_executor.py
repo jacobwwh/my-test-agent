@@ -23,6 +23,7 @@ import sys
 import time
 from pathlib import Path
 
+from check_lang import normalize_language, resolve_language
 from testagent.analyzer import create_analyzer
 from testagent.cli_utils import resolve_project_path, resolve_targets
 from testagent.config import load_config
@@ -71,6 +72,15 @@ def _default_project_for_language(language: str) -> Path:
     if language == "cpp":
         return SAMPLE_CPP_PROJECT
     return SAMPLE_PROJECT
+
+
+def _resolve_pipeline_language(
+    cli_language: str | None,
+    config_language: str | None,
+    project_path: Path,
+) -> str:
+    """解析流水线最终使用的语言。"""
+    return resolve_language(cli_language, config_language, project_path)
 
 
 def _targets_for_all_flag(
@@ -590,7 +600,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--language",
         default=None,
-        help="Target language (default: java)",
+        help="Target language (default: auto-detect from project)",
     )
     return p.parse_args()
 
@@ -623,11 +633,12 @@ def main() -> None:
         "max_iterations": args.max_iterations,
         "keep_test": args.keep_test,
         "min_branch_coverage": args.min_branch_coverage,
-        "language": args.language,
     }.items() if v is not None}
     config = load_config(**overrides)
-    default_project = _default_project_for_language(config.language)
+    requested_language = normalize_language(args.language) or normalize_language(config.language) or "java"
+    default_project = _default_project_for_language(requested_language)
     project_path = resolve_project_path(args.project, config.project_path, default_project)
+    config.language = _resolve_pipeline_language(args.language, config.language, project_path)
 
     # ── List mode ───────────────────────────────────────────────────
     language_default_targets = _default_targets_for_language(config.language)
